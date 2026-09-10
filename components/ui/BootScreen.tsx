@@ -118,12 +118,17 @@ export const BootScreen: React.FC = () => {
       }
     }, 25);
 
-    // Fail-safe: Force boot complete after 2.0s even if mobile browser throttled interval
+    // Fail-safe: Force boot complete (800ms on mobile, 1800ms on desktop)
+    const isMobileDevice =
+      typeof window !== "undefined" &&
+      (window.innerWidth < 768 || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
+    const failSafeDuration = isMobileDevice ? 800 : 1800;
+
     const failSafeTimer = setTimeout(() => {
       if (!useWorldStore.getState().isBooted) {
         handleImmediateStart();
       }
-    }, 2000);
+    }, failSafeDuration);
 
     return () => {
       clearInterval(interval);

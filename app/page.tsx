@@ -46,7 +46,7 @@ export default function NexusExperience() {
   useScrollWorld();
 
   return (
-    <main className="relative w-full h-[100dvh] overflow-hidden bg-[#030712] text-slate-100 select-none">
+    <main className="relative w-full h-[100dvh] overflow-hidden bg-[#030712] text-slate-100">
       {/* Background Matrix & Tech Grid Shell */}
       <div className="absolute inset-0 tech-grid opacity-20 pointer-events-none" />
       <div className="absolute inset-0 scanlines opacity-30 pointer-events-none" />
