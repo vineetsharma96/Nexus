@@ -13,9 +13,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NEXUS — Interface Between Humans, Intelligence, and Digital Space",
+  title: "NEXUS",
   description:
     "An immersive, futuristic, AI-native 3D web experience generated procedurally from code without external 3D models. Built with Next.js, React Three Fiber, Three.js, GLSL, and Gemini API.",
+  openGraph: {
+    title: "NEXUS",
+    description:
+      "An immersive, futuristic, AI-native 3D web experience generated procedurally from code without external 3D models. Built with Next.js, React Three Fiber, Three.js, GLSL, and Gemini API.",
+  },
 };
 
 export const viewport: Viewport = {

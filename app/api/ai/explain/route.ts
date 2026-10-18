@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAIProvider } from "@/ai/provider/getAIProvider";
+import { FallbackProvider } from "@/ai/provider/FallbackProvider";
 
 // In-memory rate limiting map: IP -> timestamp array
 const rateLimitMap = new Map<string, number[]>();
@@ -46,7 +47,14 @@ export async function POST(req: NextRequest) {
       : "core";
 
     const provider = getAIProvider();
-    const explanation = await provider.explainObject(objectId, zoneId);
+    let explanation: string;
+    try {
+      explanation = await provider.explainObject(objectId, zoneId);
+    } catch (apiErr) {
+      console.warn("[NEXUS API /api/ai/explain] Primary AI provider error, falling back to heuristics:", apiErr);
+      const fallback = new FallbackProvider();
+      explanation = await fallback.explainObject(objectId, zoneId);
+    }
 
     return NextResponse.json({
       success: true,

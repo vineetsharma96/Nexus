@@ -1,0 +1,7 @@
+{
+  "name": "NEXUS",
+  "description": "An immersive, futuristic, AI-native 3D web experience generated procedurally from code without external 3D models. Built with Next.js, React Three Fiber, Three.js, GLSL, and Gemini API.",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

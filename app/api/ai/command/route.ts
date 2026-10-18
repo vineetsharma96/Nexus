@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAIProvider } from "@/ai/provider/getAIProvider";
+import { FallbackProvider } from "@/ai/provider/FallbackProvider";
 import { SceneCommandSchema } from "@/types/commands";
 import { ZoneId } from "@/types/world";
 
@@ -62,7 +63,14 @@ export async function POST(req: NextRequest) {
     };
 
     const provider = getAIProvider();
-    const result = await provider.interpretCommand(prompt, context);
+    let result;
+    try {
+      result = await provider.interpretCommand(prompt, context);
+    } catch (apiErr) {
+      console.warn("[NEXUS API /api/ai/command] Primary AI provider error, falling back to heuristics:", apiErr);
+      const fallback = new FallbackProvider();
+      result = await fallback.interpretCommand(prompt, context);
+    }
 
     // Strict schema re-validation
     let validatedCommand = undefined;
