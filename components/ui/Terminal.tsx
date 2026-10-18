@@ -140,7 +140,7 @@ export const Terminal: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md font-mono">
-      <div className="relative w-full max-w-2xl glass-panel-glow rounded-lg border border-cyan-500/40 p-6 flex flex-col h-[520px] shadow-[0_0_50px_rgba(0,240,255,0.2)]">
+      <div className="relative w-full max-w-2xl glass-panel-glow rounded-lg border border-cyan-500/40 p-6 flex flex-col h-[520px] max-h-[85dvh] shadow-[0_0_50px_rgba(0,240,255,0.2)]">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
           <div className="flex items-center space-x-2.5">

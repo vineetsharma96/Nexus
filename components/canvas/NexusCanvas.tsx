@@ -45,12 +45,7 @@ function checkWebGLSupport(): boolean {
     const gl = (canvas.getContext("webgl2") ||
       canvas.getContext("webgl") ||
       (canvas as any).getContext("experimental-webgl")) as WebGLRenderingContext | null;
-    const supported = !!(window.WebGLRenderingContext && gl);
-    if (gl) {
-      const ext = gl.getExtension("WEBGL_lose_context");
-      if (ext) ext.loseContext();
-    }
-    return supported;
+    return !!(window.WebGLRenderingContext && gl);
   } catch {
     return false;
   }

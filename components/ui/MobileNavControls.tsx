@@ -37,7 +37,7 @@ export const MobileNavControls: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-16 right-4 z-30 flex flex-col items-center space-y-1.5 font-mono pointer-events-auto select-none">
+    <div className="fixed bottom-24 right-4 z-30 flex flex-col items-center space-y-1.5 font-mono pointer-events-auto select-none">
       {/* Step Next Zone */}
       <button
         onClick={handleNext}

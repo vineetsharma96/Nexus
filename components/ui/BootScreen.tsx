@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useWorldStore } from "@/engine/store/useWorldStore";
 import { ProceduralAudio } from "@/engine/audio/ProceduralAudio";
 import { Cpu, Terminal, Sparkles, Orbit, ShieldCheck } from "lucide-react";
@@ -55,6 +55,8 @@ export const BootScreen: React.FC = () => {
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
 
+  const hasStartedRef = useRef(false);
+
   // Global mobile error catcher
   useEffect(() => {
     const errorHandler = (e: ErrorEvent) => {
@@ -75,7 +77,6 @@ export const BootScreen: React.FC = () => {
     if (e) {
       e.stopPropagation();
     }
-    // Synchronously set store state
     useWorldStore.getState().setBooted(true);
     setBooted(true);
     setIsFadingOut(true);
@@ -85,12 +86,12 @@ export const BootScreen: React.FC = () => {
   };
 
   useEffect(() => {
-    if (isBooted) return;
+    if (isBooted || hasStartedRef.current) return;
+    hasStartedRef.current = true;
 
     let localProgress = 0;
-    // 25ms interval ensures fast calibration on all mobile screens
     const interval = setInterval(() => {
-      localProgress += Math.floor(Math.random() * 6) + 4;
+      localProgress += Math.floor(Math.random() * 8) + 6;
       if (localProgress >= 100) {
         localProgress = 100;
         clearInterval(interval);
@@ -104,31 +105,25 @@ export const BootScreen: React.FC = () => {
           setTimeout(() => {
             useWorldStore.getState().setBooted(true);
             setBooted(true);
-          }, 400);
-        }, 200);
+          }, 300);
+        }, 150);
       } else {
         setProgress(localProgress);
-
-        // Determine current stage
         const stage = BOOT_STAGES.findIndex((s) => localProgress <= s.weight);
         if (stage !== -1) {
           setCurrentStageIndex(stage);
           setBootProgress(localProgress, BOOT_STAGES[stage].label);
         }
       }
-    }, 25);
+    }, 30);
 
-    // Fail-safe: Force boot complete (800ms on mobile, 1800ms on desktop)
-    const isMobileDevice =
-      typeof window !== "undefined" &&
-      (window.innerWidth < 768 || (navigator.maxTouchPoints && navigator.maxTouchPoints > 0));
-    const failSafeDuration = isMobileDevice ? 800 : 1800;
-
+    // Fail-safe: Auto-launch after 1.5s max so it never hangs
     const failSafeTimer = setTimeout(() => {
       if (!useWorldStore.getState().isBooted) {
-        handleImmediateStart();
+        useWorldStore.getState().setBooted(true);
+        setBooted(true);
       }
-    }, failSafeDuration);
+    }, 1500);
 
     return () => {
       clearInterval(interval);
@@ -157,9 +152,8 @@ export const BootScreen: React.FC = () => {
 
       {/* Main Terminal Container */}
       <div
-        onClick={(e) => e.stopPropagation()}
-        onTouchEnd={(e) => e.stopPropagation()}
-        className="relative z-10 w-full max-w-xl mx-4 p-6 md:p-8 glass-panel corner-bracket border border-cyan-500/30 cursor-default"
+        onClick={handleImmediateStart}
+        className="relative z-10 w-full max-w-xl mx-4 p-6 md:p-8 glass-panel corner-bracket border border-cyan-500/30 cursor-pointer"
       >
         {/* Top Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10 mb-6">

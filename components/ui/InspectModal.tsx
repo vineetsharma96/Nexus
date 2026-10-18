@@ -11,7 +11,7 @@ export const InspectModal: React.FC = () => {
   if (!selectedPoi) return null;
 
   return (
-    <div className="fixed bottom-20 left-4 md:left-6 z-30 w-full max-w-sm glass-panel-glow p-5 rounded-lg border border-cyan-500/40 text-xs font-mono shadow-[0_0_30px_rgba(0,240,255,0.2)]">
+    <div className="fixed bottom-20 left-4 md:left-6 z-30 w-[calc(100vw-2rem)] max-w-sm glass-panel-glow p-5 rounded-lg border border-cyan-500/40 text-xs font-mono shadow-[0_0_30px_rgba(0,240,255,0.2)]">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-3">
         <div className="flex items-center space-x-2">

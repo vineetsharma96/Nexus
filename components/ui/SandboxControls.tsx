@@ -47,7 +47,7 @@ export const SandboxControls: React.FC = () => {
 
       {/* Slide-out Control Drawer */}
       {isOpen && (
-        <div className="fixed top-28 right-4 md:right-6 z-30 w-80 max-h-[calc(100dvh-130px)] overflow-y-auto glass-panel-glow p-5 rounded-lg border border-cyan-500/40 text-xs font-mono shadow-[0_0_40px_rgba(0,240,255,0.2)]">
+        <div className="fixed top-28 right-4 md:right-6 z-30 w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-130px)] overflow-y-auto glass-panel-glow p-5 rounded-lg border border-cyan-500/40 text-xs font-mono shadow-[0_0_40px_rgba(0,240,255,0.2)]">
           {/* Header */}
           <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
             <div className="flex items-center space-x-2 text-cyan-400">

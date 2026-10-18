@@ -27,7 +27,7 @@ export default function NexusLitePage() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#030712] text-slate-200 font-mono p-6 md:p-12 relative overflow-y-auto">
+    <div className="min-h-[100dvh] w-full max-w-full overflow-x-hidden bg-[#030712] text-slate-200 font-mono p-4 sm:p-6 md:p-12 relative overflow-y-auto">
       {/* Matrix background grid */}
       <div className="absolute inset-0 tech-grid opacity-20 pointer-events-none" />
 
@@ -43,7 +43,7 @@ export default function NexusLitePage() {
           <h1 className="text-3xl font-black tracking-wider text-white flex items-center gap-3">
             <span>NEXUS LITE</span>
             <span className="text-xs text-slate-400 font-normal">
-              // NO WEBGL REQUIREMENT
+              {"// NO WEBGL REQUIREMENT"}
             </span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
@@ -67,7 +67,6 @@ export default function NexusLitePage() {
             type="button"
             key={z.id}
             onClick={() => setActiveZone(z.id)}
-            onTouchEnd={() => setActiveZone(z.id)}
             className={`px-4 py-2.5 text-xs rounded border transition-all flex items-center space-x-2 cursor-pointer ${
               activeZone === z.id
                 ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/60 shadow-[0_0_15px_rgba(0,240,255,0.3)] font-bold"
@@ -116,7 +115,7 @@ export default function NexusLitePage() {
               </div>
             )}
             {activeZone === "data_ocean" && (
-              <div className="grid grid-cols-8 gap-3">
+              <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 sm:gap-3">
                 {Array.from({ length: 32 }).map((_, i) => (
                   <div
                     key={i}
@@ -127,8 +126,8 @@ export default function NexusLitePage() {
               </div>
             )}
             {activeZone === "ai_lab" && (
-              <div className="flex items-center space-x-4">
-                {["PERCEIVE", "REASON", "PLAN", "ACT", "OBSERVE"].map((step, idx) => (
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {["PERCEIVE", "REASON", "PLAN", "ACT", "OBSERVE"].map((step) => (
                   <div
                     key={step}
                     className="px-2 py-1 rounded bg-amber-500/20 border border-amber-400 text-[10px] text-amber-300 font-bold"
