@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useWorldStore } from "@/engine/store/useWorldStore";
 import { ZoneId } from "@/types/world";
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw } from "lucide-react";
 
 export const MobileNavControls: React.FC = () => {
   const [isMobile, setIsMobile] = useState(false);
@@ -15,6 +15,7 @@ export const MobileNavControls: React.FC = () => {
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const isTourActive = useWorldStore((state) => state.isTourActive);
   const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
+  const isSandboxOpen = useWorldStore((state) => state.isSandboxOpen);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -25,7 +26,15 @@ export const MobileNavControls: React.FC = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  if (!isMobile || !isBooted || isTerminalOpen || selectedPoi || isTourActive || isCvEnabled) {
+  if (
+    !isMobile ||
+    !isBooted ||
+    isTerminalOpen ||
+    selectedPoi ||
+    isTourActive ||
+    isCvEnabled ||
+    isSandboxOpen
+  ) {
     return null;
   }
 
@@ -45,6 +54,7 @@ export const MobileNavControls: React.FC = () => {
     <div className="fixed bottom-14 right-2.5 z-20 flex flex-col items-center space-y-1.5 font-mono pointer-events-auto select-none">
       {/* Step Next Zone */}
       <button
+        type="button"
         onClick={handleNext}
         className="w-10 h-10 rounded-full glass-panel-glow border border-cyan-400/50 flex items-center justify-center text-cyan-300 active:scale-95 shadow-[0_0_12px_rgba(0,240,255,0.4)]"
         title="Next Zone"
@@ -55,6 +65,7 @@ export const MobileNavControls: React.FC = () => {
 
       {/* Step Prev Zone */}
       <button
+        type="button"
         onClick={handlePrev}
         className="w-10 h-10 rounded-full glass-panel border border-white/20 flex items-center justify-center text-slate-300 active:scale-95"
         title="Previous Zone"
@@ -65,6 +76,7 @@ export const MobileNavControls: React.FC = () => {
 
       {/* Quick Reset to Core */}
       <button
+        type="button"
         onClick={resetWorld}
         className="w-8 h-8 rounded-full glass-panel border border-white/10 flex items-center justify-center text-slate-400 active:scale-95 text-[10px]"
         title="Reset to Core"

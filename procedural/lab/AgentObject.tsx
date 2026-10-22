@@ -19,6 +19,8 @@ export const AgentObject: React.FC = () => {
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
+  const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === "agent";
 
@@ -36,8 +38,11 @@ export const AgentObject: React.FC = () => {
     });
   }, []);
 
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
 
     // Pulse core
     if (coreRef.current) {

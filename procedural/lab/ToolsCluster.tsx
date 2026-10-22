@@ -22,11 +22,16 @@ export const ToolsCluster: React.FC = () => {
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
+  const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === "tools";
 
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
     if (groupRef.current) {
       groupRef.current.children.forEach((child, idx) => {
         child.rotation.y = time * 0.4 + idx;

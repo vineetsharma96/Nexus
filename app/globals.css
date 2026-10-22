@@ -115,3 +115,11 @@
   border-bottom: 2px solid var(--accent-cyan);
   border-right: 2px solid var(--accent-cyan);
 }
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

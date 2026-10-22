@@ -22,7 +22,9 @@ export const CoreGeometry: React.FC = () => {
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
   const objectScale = useWorldStore((state) => state.objectScale);
+  const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === "ai_core";
 
@@ -49,8 +51,11 @@ export const CoreGeometry: React.FC = () => {
     });
   }, []);
 
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
 
     // Update shader uniforms
     if (shaderMaterial) {
@@ -104,8 +109,10 @@ export const CoreGeometry: React.FC = () => {
           child.position.x = Math.cos(currentAngle) * node.radius;
           child.position.z = Math.sin(currentAngle) * node.radius;
           child.position.y = node.yOffset + Math.sin(time * 2 + idx) * 0.2;
-          child.rotation.x += 0.02;
-          child.rotation.y += 0.03;
+          if (!isActivityPaused) {
+            child.rotation.x += 0.02 * environmentSpeed;
+            child.rotation.y += 0.03 * environmentSpeed;
+          }
         }
       });
     }

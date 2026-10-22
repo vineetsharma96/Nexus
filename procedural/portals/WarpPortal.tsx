@@ -28,6 +28,8 @@ export const WarpPortal: React.FC<WarpPortalProps> = ({
 
   const setZone = useWorldStore((state) => state.setZone);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
+  const simTimeRef = useRef(0);
 
   // Initialize custom GLSL portal material
   const portalMaterial = useMemo(() => {
@@ -43,8 +45,11 @@ export const WarpPortal: React.FC<WarpPortalProps> = ({
     return mat;
   }, [color]);
 
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
 
     // Update portal shader time uniform
     if (portalMaterial) {

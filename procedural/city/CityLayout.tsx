@@ -5,10 +5,14 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Building, BuildingParams, BuildingType } from "./BuildingGenerator";
 import { SeededRandom } from "../prng/SeededRandom";
+import { useWorldStore } from "@/engine/store/useWorldStore";
 
 export const CityLayout: React.FC = () => {
   const cityGroupRef = useRef<THREE.Group>(null);
   const circuitLinesRef = useRef<THREE.LineSegments>(null);
+  const simTimeRef = useRef(0);
+  const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
 
   const buildings = useMemo(() => {
     const prng = new SeededRandom(42918);
@@ -117,9 +121,12 @@ export const CityLayout: React.FC = () => {
     return new THREE.BufferGeometry().setFromPoints(points);
   }, []);
 
-  useFrame((state) => {
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
     if (circuitLinesRef.current) {
-      const time = state.clock.getElapsedTime();
+      const time = simTimeRef.current;
       // Flowing energy intensity in street conduits
       const mat = circuitLinesRef.current.material as THREE.LineBasicMaterial;
       mat.opacity = 0.25 + Math.sin(time * 2.5) * 0.15;

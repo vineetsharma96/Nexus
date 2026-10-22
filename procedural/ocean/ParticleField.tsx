@@ -119,18 +119,23 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
     }, [count]);
 
   const activeStateRef = useRef<OceanState>(oceanState);
+  const simTimeRef = useRef(0);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
 
   useEffect(() => {
     activeStateRef.current = oceanState;
   }, [oceanState]);
 
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     if (!pointsRef.current) return;
     const geom = pointsRef.current.geometry;
     const posAttr = geom.attributes.position as THREE.BufferAttribute;
     const posArray = posAttr.array as Float32Array;
 
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
     const active = activeStateRef.current;
 
     // Update shader time uniform
@@ -138,7 +143,7 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
       particleShaderMaterial.uniforms.uTime.value = time;
     }
 
-    const lerpSpeed = Math.min(1.0, delta * 3.5);
+    const lerpSpeed = isActivityPaused ? 0 : Math.min(1.0, delta * 3.5);
 
     for (let i = 0; i < count; i++) {
       const idx = i * 3;

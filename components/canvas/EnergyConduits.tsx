@@ -9,7 +9,9 @@ export const EnergyConduits: React.FC = () => {
   const lineRef1 = useRef<THREE.Line>(null);
   const lineRef2 = useRef<THREE.Line>(null);
   const lineRef3 = useRef<THREE.Line>(null);
+  const simTimeRef = useRef(0);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
 
   // 1. Core -> Code City spline curve
   const curveCoreToCity = useMemo(() => {
@@ -49,8 +51,11 @@ export const EnergyConduits: React.FC = () => {
   const geom2 = useMemo(() => new THREE.BufferGeometry().setFromPoints(points2), [points2]);
   const geom3 = useMemo(() => new THREE.BufferGeometry().setFromPoints(points3), [points3]);
 
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
 
     if (lineRef1.current) {
       const mat = lineRef1.current.material as THREE.LineBasicMaterial;

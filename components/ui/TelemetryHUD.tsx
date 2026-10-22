@@ -51,19 +51,19 @@ export const TelemetryHUD: React.FC = () => {
       {/* Top Group: Header + Mobile Zone Bar */}
       <div className="flex flex-col gap-1.5 sm:gap-2 w-full">
         {/* Top Telemetry Header */}
-        <header className="flex items-center justify-between w-full gap-2">
+        <header className="flex items-center justify-between w-full gap-2 h-10 sm:h-11">
           {/* Left: Brand & Zone Title */}
           <div className="flex items-center min-w-0 pointer-events-auto">
-            <div className="glass-panel px-2.5 sm:px-4 py-1.5 sm:py-2 border-l-2 border-cyan-400 rounded-r flex items-center space-x-2 sm:space-x-3 min-w-0">
-              <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+            <div className="glass-panel px-2.5 sm:px-3.5 py-1 sm:py-1.5 border-l-2 border-cyan-400 rounded-r flex items-center space-x-2 sm:space-x-2.5 min-w-0">
+              <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
               <div className="min-w-0">
-                <div className="text-[11px] sm:text-xs font-bold text-white tracking-widest flex items-center gap-1.5">
+                <div className="text-[11px] sm:text-xs font-bold text-white tracking-widest flex items-center gap-1.5 whitespace-nowrap">
                   <span>NEXUS</span>
                   <span className="hidden sm:inline text-[10px] text-cyan-400 font-normal border border-cyan-400/30 px-1 rounded">
                     SYS.ONLINE
                   </span>
                 </div>
-                <div className="text-[10px] sm:text-[11px] text-slate-400 font-normal truncate max-w-[135px] sm:max-w-none">
+                <div className="text-[9px] sm:text-[10px] text-slate-400 font-normal truncate max-w-[125px] sm:max-w-[200px]">
                   {activeZoneMeta.name}
                 </div>
               </div>
@@ -71,14 +71,15 @@ export const TelemetryHUD: React.FC = () => {
           </div>
 
           {/* Center: Zone Jump Chips (Desktop) */}
-          <nav className="hidden lg:flex items-center space-x-1.5 glass-panel p-1.5 rounded-full border border-white/10 pointer-events-auto">
+          <nav className="hidden lg:flex items-center space-x-1.5 glass-panel p-1 rounded-full border border-white/10 pointer-events-auto shrink-0">
             {zones.map((z) => {
               const isActive = currentZone === z.id;
               return (
                 <button
+                  type="button"
                   key={z.id}
                   onClick={() => setZone(z.id)}
-                  className={`px-3 py-1 text-xs rounded-full transition-all duration-200 flex items-center space-x-1.5 cursor-pointer ${
+                  className={`px-3 py-1 text-xs rounded-full transition-all duration-200 flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
                     isActive
                       ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_10px_rgba(0,240,255,0.3)] font-semibold"
                       : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
@@ -95,8 +96,9 @@ export const TelemetryHUD: React.FC = () => {
           <div className="flex items-center space-x-1.5 sm:space-x-2 pointer-events-auto shrink-0">
             {/* AI Tour Guide Button */}
             <button
+              type="button"
               onClick={isTourActive ? endTour : startTour}
-              className={`px-2.5 sm:px-3 py-1.5 sm:py-1.5 text-xs rounded border transition-all flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs rounded border transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
                 isTourActive
                   ? "bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse"
                   : "glass-panel text-slate-300 hover:text-white hover:border-cyan-500/40 border-white/10"
@@ -105,12 +107,12 @@ export const TelemetryHUD: React.FC = () => {
             >
               {isTourActive ? (
                 <>
-                  <Square className="w-3.5 h-3.5 text-amber-400" />
+                  <Square className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="hidden sm:inline">END TOUR</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-3.5 h-3.5 text-cyan-400" />
+                  <Play className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   <span className="hidden sm:inline">AI TOUR</span>
                 </>
               )}
@@ -118,27 +120,29 @@ export const TelemetryHUD: React.FC = () => {
 
             {/* AI Terminal Toggle */}
             <button
+              type="button"
               onClick={toggleTerminal}
-              className={`px-2.5 sm:px-3 py-1.5 sm:py-1.5 text-xs rounded border transition-all flex items-center space-x-1.5 cursor-pointer ${
+              className={`px-2.5 sm:px-3 py-1.5 text-xs rounded border transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${
                 isTerminalOpen
                   ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-[0_0_12px_rgba(0,240,255,0.4)] font-semibold"
                   : "glass-panel text-slate-300 hover:text-white hover:border-cyan-500/40 border-white/10"
               }`}
               title="Open AI Command Terminal"
             >
-              <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+              <Terminal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span className="hidden sm:inline">COMMAND</span>
             </button>
 
             {/* Audio Synthesizer Toggle */}
             <button
+              type="button"
               onClick={() => {
                 const nextMuted = !isAudioMuted;
                 toggleAudio();
                 ProceduralAudio.toggleAmbient(nextMuted);
                 if (!nextMuted) ProceduralAudio.playSelect();
               }}
-              className="glass-panel p-1.5 sm:p-2 text-slate-300 hover:text-white hover:border-cyan-500/40 border border-white/10 rounded transition-all cursor-pointer"
+              className="glass-panel p-1.5 sm:p-2 text-slate-300 hover:text-white hover:border-cyan-500/40 border border-white/10 rounded transition-all cursor-pointer shrink-0"
               title={isAudioMuted ? "Unmute Ambient Synthesis" : "Mute Ambient Synthesis"}
             >
               {isAudioMuted ? (
@@ -150,15 +154,16 @@ export const TelemetryHUD: React.FC = () => {
           </div>
         </header>
 
-        {/* Mobile Zone Selector Bar (Docked directly below header, never floating in middle) */}
-        <nav className="lg:hidden grid grid-cols-4 gap-1 glass-panel p-1 rounded border border-white/10 pointer-events-auto w-full">
+        {/* Mobile Zone Selector Bar (Docked directly below header, fixed 34px height) */}
+        <nav className="lg:hidden grid grid-cols-4 gap-1 glass-panel p-1 rounded border border-white/10 pointer-events-auto w-full h-[34px]">
           {zones.map((z) => {
             const isActive = currentZone === z.id;
             return (
               <button
+                type="button"
                 key={z.id}
                 onClick={() => setZone(z.id)}
-                className={`py-1.5 px-1 text-[10px] rounded transition-all flex items-center justify-center space-x-1 truncate cursor-pointer ${
+                className={`px-1 text-[10px] rounded transition-all flex items-center justify-center space-x-1 truncate cursor-pointer whitespace-nowrap ${
                   isActive
                     ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold shadow-[0_0_8px_rgba(0,240,255,0.25)]"
                     : "text-slate-400 hover:text-white"

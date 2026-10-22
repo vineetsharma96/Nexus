@@ -1,6 +1,17 @@
 import { create } from "zustand";
 import { ZoneId, QualityTier, CameraMode, OceanState, PointOfInterest } from "@/types/world";
 
+export type CvGestureType =
+  | "idle"
+  | "pinching_small"
+  | "pinching_big"
+  | "fist_pause"
+  | "palm_resume"
+  | "swipe_left"
+  | "swipe_right";
+
+export const ZONE_ORDER: ZoneId[] = ["core", "code_city", "data_ocean", "ai_lab"];
+
 export interface WorldState {
   // Navigation & Spatial
   currentZone: ZoneId;
@@ -14,6 +25,8 @@ export interface WorldState {
   fps: number;
   oceanState: OceanState;
   environmentSpeed: number;
+  savedEnvironmentSpeed: number;
+  isActivityPaused: boolean;
   lightingIntensity: number;
   colorScheme: "default" | "cyber" | "amber" | "monochrome";
 
@@ -24,6 +37,7 @@ export interface WorldState {
   isAudioMuted: boolean;
   isReducedMotion: boolean;
   isTerminalOpen: boolean;
+  isSandboxOpen: boolean;
 
   // Guided Tour
   isTourActive: boolean;
@@ -31,12 +45,13 @@ export interface WorldState {
   tourCurrentStep: number;
   tourTotalSteps: number;
 
-  // AR & Computer Vision Pinch Scaling
+  // AR & Computer Vision Gestures
   isArMode: boolean;
   isCvEnabled: boolean;
   objectScale: number;
   pinchDistance: number | null;
   pinchState: "idle" | "pinching_small" | "pinching_big";
+  cvGesture: CvGestureType;
   invertPinch: boolean;
   arFacingMode: "user" | "environment";
 
@@ -44,17 +59,21 @@ export interface WorldState {
   setBooted: (isBooted: boolean) => void;
   setBootProgress: (progress: number, text?: string) => void;
   setZone: (zone: ZoneId) => void;
+  cycleZone: (direction: "next" | "prev") => void;
   setCameraMode: (mode: CameraMode) => void;
   setSelectedPoi: (poi: PointOfInterest | null) => void;
   setInspectedNodeId: (nodeId: string | null) => void;
   setQualityTier: (tier: QualityTier) => void;
   setFps: (fps: number) => void;
   setOceanState: (state: OceanState) => void;
+  setActivityPaused: (paused: boolean) => void;
   setAudioMuted: (muted: boolean) => void;
   toggleAudio: () => void;
   setReducedMotion: (reduced: boolean) => void;
   setTerminalOpen: (open: boolean) => void;
   toggleTerminal: () => void;
+  setSandboxOpen: (open: boolean) => void;
+  toggleSandbox: () => void;
   startTour: () => void;
   toggleTourPause: () => void;
   goToTourStep: (step: number) => void;
@@ -72,8 +91,10 @@ export interface WorldState {
     state: "idle" | "pinching_small" | "pinching_big",
     scale?: number
   ) => void;
+  setCvGesture: (gesture: CvGestureType) => void;
   toggleInvertPinch: () => void;
   setArFacingMode: (mode: "user" | "environment") => void;
+  toggleArFacingMode: () => void;
 }
 
 export const useWorldStore = create<WorldState>((set) => ({
@@ -87,6 +108,8 @@ export const useWorldStore = create<WorldState>((set) => ({
   fps: 60,
   oceanState: "wave",
   environmentSpeed: 1.0,
+  savedEnvironmentSpeed: 1.0,
+  isActivityPaused: false,
   lightingIntensity: 1.0,
   colorScheme: "default",
 
@@ -96,6 +119,7 @@ export const useWorldStore = create<WorldState>((set) => ({
   isAudioMuted: true,
   isReducedMotion: false,
   isTerminalOpen: false,
+  isSandboxOpen: false,
 
   isTourActive: false,
   isTourPaused: false,
@@ -107,6 +131,7 @@ export const useWorldStore = create<WorldState>((set) => ({
   objectScale: 1.0,
   pinchDistance: null,
   pinchState: "idle",
+  cvGesture: "idle",
   invertPinch: false,
   arFacingMode: "user",
 
@@ -123,17 +148,71 @@ export const useWorldStore = create<WorldState>((set) => ({
       selectedPoi: null,
       inspectedNodeId: null,
     })),
+  cycleZone: (direction) =>
+    set((state) => {
+      const idx = ZONE_ORDER.indexOf(state.currentZone);
+      const nextIdx =
+        direction === "next"
+          ? (idx + 1) % ZONE_ORDER.length
+          : (idx - 1 + ZONE_ORDER.length) % ZONE_ORDER.length;
+      return {
+        currentZone: ZONE_ORDER[nextIdx],
+        previousZone: state.currentZone,
+        selectedPoi: null,
+        inspectedNodeId: null,
+        cvGesture: direction === "next" ? "swipe_right" : "swipe_left",
+      };
+    }),
   setCameraMode: (mode) => set({ cameraMode: mode }),
   setSelectedPoi: (poi) => set({ selectedPoi: poi }),
   setInspectedNodeId: (nodeId) => set({ inspectedNodeId: nodeId }),
   setQualityTier: (tier) => set({ qualityTier: tier }),
   setFps: (fps) => set({ fps }),
   setOceanState: (oceanState) => set({ oceanState }),
+  setActivityPaused: (paused) =>
+    set((state) => {
+      if (paused) {
+        return {
+          isActivityPaused: true,
+          savedEnvironmentSpeed:
+            state.environmentSpeed > 0 ? state.environmentSpeed : state.savedEnvironmentSpeed || 1.0,
+          environmentSpeed: 0,
+          isTourPaused: state.isTourActive ? true : state.isTourPaused,
+          cvGesture: "fist_pause",
+        };
+      }
+      return {
+        isActivityPaused: false,
+        environmentSpeed: state.savedEnvironmentSpeed > 0 ? state.savedEnvironmentSpeed : 1.0,
+        isTourPaused: state.isTourActive ? false : state.isTourPaused,
+        cvGesture: "palm_resume",
+      };
+    }),
   setAudioMuted: (isAudioMuted) => set({ isAudioMuted }),
   toggleAudio: () => set((state) => ({ isAudioMuted: !state.isAudioMuted })),
   setReducedMotion: (isReducedMotion) => set({ isReducedMotion }),
   setTerminalOpen: (isTerminalOpen) => set({ isTerminalOpen }),
   toggleTerminal: () => set((state) => ({ isTerminalOpen: !state.isTerminalOpen })),
+  setSandboxOpen: (isSandboxOpen) =>
+    set((state) => ({
+      isSandboxOpen,
+      // Prevent mobile overlap with CV panel if screen is narrow
+      isCvEnabled:
+        isSandboxOpen && typeof window !== "undefined" && window.innerWidth < 640
+          ? false
+          : state.isCvEnabled,
+    })),
+  toggleSandbox: () =>
+    set((state) => {
+      const nextOpen = !state.isSandboxOpen;
+      return {
+        isSandboxOpen: nextOpen,
+        isCvEnabled:
+          nextOpen && typeof window !== "undefined" && window.innerWidth < 640
+            ? false
+            : state.isCvEnabled,
+      };
+    }),
 
   startTour: () =>
     set({
@@ -143,6 +222,7 @@ export const useWorldStore = create<WorldState>((set) => ({
       cameraMode: "tour",
       currentZone: "core",
       selectedPoi: null,
+      isSandboxOpen: false,
     }),
   toggleTourPause: () => set((state) => ({ isTourPaused: !state.isTourPaused })),
   goToTourStep: (step) =>
@@ -177,18 +257,25 @@ export const useWorldStore = create<WorldState>((set) => ({
       inspectedNodeId: null,
       oceanState: "wave",
       environmentSpeed: 1.0,
+      savedEnvironmentSpeed: 1.0,
+      isActivityPaused: false,
       lightingIntensity: 1.0,
       isTourActive: false,
       isTourPaused: false,
       objectScale: 1.0,
       pinchDistance: null,
       pinchState: "idle",
+      cvGesture: "idle",
     }),
 
   setArMode: (isArMode) =>
     set((state) => ({
       isArMode,
       isCvEnabled: isArMode ? true : state.isCvEnabled,
+      isSandboxOpen:
+        isArMode && typeof window !== "undefined" && window.innerWidth < 640
+          ? false
+          : state.isSandboxOpen,
     })),
   toggleArMode: () =>
     set((state) => {
@@ -196,6 +283,10 @@ export const useWorldStore = create<WorldState>((set) => ({
       return {
         isArMode: nextAr,
         isCvEnabled: nextAr ? true : state.isCvEnabled,
+        isSandboxOpen:
+          nextAr && typeof window !== "undefined" && window.innerWidth < 640
+            ? false
+            : state.isSandboxOpen,
       };
     }),
   setCvEnabled: (isCvEnabled) =>
@@ -204,6 +295,11 @@ export const useWorldStore = create<WorldState>((set) => ({
       isArMode: !isCvEnabled ? false : state.isArMode,
       pinchDistance: !isCvEnabled ? null : state.pinchDistance,
       pinchState: !isCvEnabled ? "idle" : state.pinchState,
+      cvGesture: !isCvEnabled ? "idle" : state.cvGesture,
+      isSandboxOpen:
+        isCvEnabled && typeof window !== "undefined" && window.innerWidth < 640
+          ? false
+          : state.isSandboxOpen,
     })),
   toggleCvEnabled: () =>
     set((state) => {
@@ -213,6 +309,11 @@ export const useWorldStore = create<WorldState>((set) => ({
         isArMode: !nextCv ? false : state.isArMode,
         pinchDistance: !nextCv ? null : state.pinchDistance,
         pinchState: !nextCv ? "idle" : state.pinchState,
+        cvGesture: !nextCv ? "idle" : state.cvGesture,
+        isSandboxOpen:
+          nextCv && typeof window !== "undefined" && window.innerWidth < 640
+            ? false
+            : state.isSandboxOpen,
       };
     }),
   setObjectScale: (scale) =>
@@ -223,12 +324,23 @@ export const useWorldStore = create<WorldState>((set) => ({
     set((state) => ({
       pinchDistance,
       pinchState,
+      cvGesture:
+        pinchState === "pinching_big" || pinchState === "pinching_small"
+          ? pinchState
+          : state.cvGesture === "pinching_big" || state.cvGesture === "pinching_small"
+          ? "idle"
+          : state.cvGesture,
       objectScale:
         scale !== undefined
           ? Math.max(0.2, Math.min(3.5, scale))
           : state.objectScale,
     })),
+  setCvGesture: (cvGesture) => set({ cvGesture }),
   toggleInvertPinch: () =>
     set((state) => ({ invertPinch: !state.invertPinch })),
   setArFacingMode: (arFacingMode) => set({ arFacingMode }),
+  toggleArFacingMode: () =>
+    set((state) => ({
+      arFacingMode: state.arFacingMode === "user" ? "environment" : "user",
+    })),
 }));

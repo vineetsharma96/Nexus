@@ -15,7 +15,9 @@ export const CoreParticles: React.FC<CoreParticlesProps> = ({
   radius = 5.5,
 }) => {
   const pointsRef = useRef<THREE.Points>(null);
+  const simTimeRef = useRef(0);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
   const qualityTier = useWorldStore((state) => state.qualityTier);
 
   // Adjust count dynamically based on quality tier
@@ -70,9 +72,12 @@ export const CoreParticles: React.FC<CoreParticlesProps> = ({
     return { positions: pos, colors: col, randomOffsets: offsets };
   }, [effectiveCount, radius]);
 
-  useFrame((state) => {
+  useFrame((_state, delta) => {
     if (!pointsRef.current) return;
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
 
     // Slow orbital rotation
     pointsRef.current.rotation.y = time * 0.15;

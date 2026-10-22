@@ -14,6 +14,8 @@ export const MemoryLattice: React.FC = () => {
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
+  const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === "memory";
 
@@ -51,8 +53,11 @@ export const MemoryLattice: React.FC = () => {
     return { nodePositions: nodes, lineGeometry: geom };
   }, []);
 
-  useFrame((state) => {
-    const time = state.clock.getElapsedTime() * environmentSpeed;
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
+    const time = simTimeRef.current;
     if (groupRef.current) {
       groupRef.current.rotation.y = time * 0.15;
       groupRef.current.rotation.x = Math.sin(time * 0.1) * 0.1;

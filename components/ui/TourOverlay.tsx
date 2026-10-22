@@ -90,8 +90,8 @@ export const TourOverlay: React.FC = () => {
   if (!isTourActive) return null;
 
   return (
-    <div className="fixed bottom-14 sm:bottom-auto sm:top-[140px] lg:top-20 left-2.5 right-2.5 sm:left-1/2 sm:-translate-x-1/2 z-30 sm:w-full sm:max-w-xl sm:px-4 pointer-events-auto font-mono select-none">
-      <div className="glass-panel-glow p-3.5 sm:p-5 rounded-lg border border-amber-500/40 text-xs shadow-[0_0_40px_rgba(245,158,11,0.25)] relative overflow-hidden">
+    <div className="fixed bottom-14 sm:bottom-16 left-2.5 right-2.5 sm:left-1/2 sm:-translate-x-1/2 z-30 sm:w-full sm:max-w-lg sm:px-4 pointer-events-auto font-mono select-none">
+      <div className="glass-panel-glow p-3.5 sm:p-4 rounded-lg border border-amber-500/40 text-xs shadow-[0_0_40px_rgba(245,158,11,0.25)] relative overflow-hidden max-h-[38dvh] sm:max-h-[45dvh] overflow-y-auto">
         {/* Top Auto-Advance Progress Line */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-white/10">
           <div

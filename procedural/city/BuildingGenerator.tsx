@@ -46,6 +46,9 @@ export const Building: React.FC<BuildingParams> = ({
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
   const objectScale = useWorldStore((state) => state.objectScale);
+  const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
+  const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === id;
 
@@ -53,9 +56,12 @@ export const Building: React.FC<BuildingParams> = ({
     return ProceduralTextures.getBuildingWindowsTexture();
   }, []);
 
-  useFrame((state) => {
+  useFrame((_state, delta) => {
+    if (!isActivityPaused) {
+      simTimeRef.current += delta * environmentSpeed;
+    }
     if (beaconRef.current) {
-      const time = state.clock.getElapsedTime();
+      const time = simTimeRef.current;
       // Pulsing rooftop antenna beacon
       const intensity = Math.sin(time * 6) > 0.2 ? 1 : 0.2;
       (beaconRef.current.material as THREE.MeshBasicMaterial).opacity = intensity;
