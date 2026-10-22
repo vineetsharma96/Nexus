@@ -51,6 +51,13 @@ export const AgentObject: React.FC = () => {
       orbitGroupRef.current.rotation.y = time * 0.2;
     }
 
+    if (groupRef.current) {
+      const currentScale = useWorldStore.getState().objectScale;
+      const targetS = !selectedPoi || isSelected ? currentScale : 1.0;
+      const nextS = THREE.MathUtils.lerp(groupRef.current.scale.x, targetS, 0.16);
+      groupRef.current.scale.setScalar(nextS);
+    }
+
     // Advance lifecycle stage every 1.8 seconds
     const stage = Math.floor((time / 1.8) % STAGES.length);
     if (stage !== activeStageIndex) {

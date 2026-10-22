@@ -45,6 +45,7 @@ export const Building: React.FC<BuildingParams> = ({
 
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
+  const objectScale = useWorldStore((state) => state.objectScale);
 
   const isSelected = selectedPoi?.id === id;
 
@@ -58,6 +59,12 @@ export const Building: React.FC<BuildingParams> = ({
       // Pulsing rooftop antenna beacon
       const intensity = Math.sin(time * 6) > 0.2 ? 1 : 0.2;
       (beaconRef.current.material as THREE.MeshBasicMaterial).opacity = intensity;
+    }
+    if (meshRef.current) {
+      const targetS = !selectedPoi || isSelected ? objectScale : 1.0;
+      const nextS = THREE.MathUtils.lerp(meshRef.current.scale.x, targetS, 0.16);
+      meshRef.current.scale.setScalar(nextS);
+      meshRef.current.position.y = (height * nextS) / 2 + position[1];
     }
   });
 

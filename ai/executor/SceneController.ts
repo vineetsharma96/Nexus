@@ -65,6 +65,18 @@ export class SceneController {
       case "explain":
         // Handled via narration message
         break;
+
+      case "scale_object":
+        store.setPinchTelemetry(
+          command.scale > 1 ? 0.85 : 0.15,
+          command.scale > 1 ? "pinching_big" : command.scale < 1 ? "pinching_small" : "idle",
+          command.scale
+        );
+        break;
+
+      case "toggle_ar":
+        store.setArMode(command.enabled);
+        break;
     }
   }
 }

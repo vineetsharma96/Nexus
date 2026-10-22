@@ -31,6 +31,15 @@ export interface WorldState {
   tourCurrentStep: number;
   tourTotalSteps: number;
 
+  // AR & Computer Vision Pinch Scaling
+  isArMode: boolean;
+  isCvEnabled: boolean;
+  objectScale: number;
+  pinchDistance: number | null;
+  pinchState: "idle" | "pinching_small" | "pinching_big";
+  invertPinch: boolean;
+  arFacingMode: "user" | "environment";
+
   // Actions
   setBooted: (isBooted: boolean) => void;
   setBootProgress: (progress: number, text?: string) => void;
@@ -53,6 +62,18 @@ export interface WorldState {
   prevTourStep: () => void;
   endTour: () => void;
   resetWorld: () => void;
+  setArMode: (active: boolean) => void;
+  toggleArMode: () => void;
+  setCvEnabled: (enabled: boolean) => void;
+  toggleCvEnabled: () => void;
+  setObjectScale: (scale: number) => void;
+  setPinchTelemetry: (
+    distance: number | null,
+    state: "idle" | "pinching_small" | "pinching_big",
+    scale?: number
+  ) => void;
+  toggleInvertPinch: () => void;
+  setArFacingMode: (mode: "user" | "environment") => void;
 }
 
 export const useWorldStore = create<WorldState>((set) => ({
@@ -80,6 +101,14 @@ export const useWorldStore = create<WorldState>((set) => ({
   isTourPaused: false,
   tourCurrentStep: 0,
   tourTotalSteps: 7,
+
+  isArMode: false,
+  isCvEnabled: false,
+  objectScale: 1.0,
+  pinchDistance: null,
+  pinchState: "idle",
+  invertPinch: false,
+  arFacingMode: "user",
 
   setBooted: (isBooted) => set({ isBooted }),
   setBootProgress: (progress, text) =>
@@ -151,5 +180,55 @@ export const useWorldStore = create<WorldState>((set) => ({
       lightingIntensity: 1.0,
       isTourActive: false,
       isTourPaused: false,
+      objectScale: 1.0,
+      pinchDistance: null,
+      pinchState: "idle",
     }),
+
+  setArMode: (isArMode) =>
+    set((state) => ({
+      isArMode,
+      isCvEnabled: isArMode ? true : state.isCvEnabled,
+    })),
+  toggleArMode: () =>
+    set((state) => {
+      const nextAr = !state.isArMode;
+      return {
+        isArMode: nextAr,
+        isCvEnabled: nextAr ? true : state.isCvEnabled,
+      };
+    }),
+  setCvEnabled: (isCvEnabled) =>
+    set((state) => ({
+      isCvEnabled,
+      isArMode: !isCvEnabled ? false : state.isArMode,
+      pinchDistance: !isCvEnabled ? null : state.pinchDistance,
+      pinchState: !isCvEnabled ? "idle" : state.pinchState,
+    })),
+  toggleCvEnabled: () =>
+    set((state) => {
+      const nextCv = !state.isCvEnabled;
+      return {
+        isCvEnabled: nextCv,
+        isArMode: !nextCv ? false : state.isArMode,
+        pinchDistance: !nextCv ? null : state.pinchDistance,
+        pinchState: !nextCv ? "idle" : state.pinchState,
+      };
+    }),
+  setObjectScale: (scale) =>
+    set({
+      objectScale: Math.max(0.2, Math.min(3.5, scale)),
+    }),
+  setPinchTelemetry: (pinchDistance, pinchState, scale) =>
+    set((state) => ({
+      pinchDistance,
+      pinchState,
+      objectScale:
+        scale !== undefined
+          ? Math.max(0.2, Math.min(3.5, scale))
+          : state.objectScale,
+    })),
+  toggleInvertPinch: () =>
+    set((state) => ({ invertPinch: !state.invertPinch })),
+  setArFacingMode: (arFacingMode) => set({ arFacingMode }),
 }));

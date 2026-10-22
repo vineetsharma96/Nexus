@@ -53,6 +53,7 @@ function checkWebGLSupport(): boolean {
 
 export const NexusCanvas: React.FC = () => {
   const qualityTier = useWorldStore((state) => state.qualityTier);
+  const isArMode = useWorldStore((state) => state.isArMode);
   const [hasWebGL, setHasWebGL] = useState(true);
 
   useEffect(() => {
@@ -101,6 +102,7 @@ export const NexusCanvas: React.FC = () => {
           camera={{ position: [0, 6, 18], fov: 45, near: 0.1, far: 250 }}
           dpr={dpr}
           gl={{
+            alpha: true,
             antialias: qualityTier === "ultra" || qualityTier === "high",
             powerPreference: "default",
             failIfMajorPerformanceCaveat: false,
@@ -108,7 +110,7 @@ export const NexusCanvas: React.FC = () => {
             depth: true,
           }}
         >
-          <color attach="background" args={["#030712"]} />
+          {!isArMode && <color attach="background" args={["#030712"]} />}
           <Suspense fallback={null}>
             <SceneManager />
           </Suspense>

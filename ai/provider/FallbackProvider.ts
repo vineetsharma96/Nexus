@@ -36,7 +36,16 @@ export class FallbackProvider implements IAIProvider {
       narration = "Dispersing particles into Brownian entropy cloud.";
     } else if (p.includes("reset")) {
       command = { action: "reset_world" };
-      narration = "All spatial coordinates and environmental parameters reset to origin state.";
+      narration = "All spatial coordinates, object scales, and environmental parameters reset to origin state.";
+    } else if (p.includes("bigger") || p.includes("enlarge") || p.includes("grow") || p.includes("scale up")) {
+      command = { action: "scale_object", scale: 2.0 };
+      narration = "Computer Vision Pinch Vector expanded — scaling 3D object manifold to 2.0x.";
+    } else if (p.includes("smaller") || p.includes("shrink") || p.includes("small") || p.includes("scale down")) {
+      command = { action: "scale_object", scale: 0.45 };
+      narration = "Computer Vision Pinch Vector contracted — scaling 3D object manifold to 0.45x.";
+    } else if (p.includes("ar") || p.includes("augmented") || p.includes("camera") || p.includes("vision") || p.includes("pinch")) {
+      command = { action: "toggle_ar", enabled: !p.includes("off") && !p.includes("disable") };
+      narration = "Augmented Reality optical passthrough and 21-point Computer Vision hand pinch tracker engaged.";
     } else {
       narration = `NEXUS parsed directive: "${prompt}". Environmental parameters calibrated.`;
     }

@@ -22,6 +22,7 @@ export const CoreGeometry: React.FC = () => {
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
+  const objectScale = useWorldStore((state) => state.objectScale);
 
   const isSelected = selectedPoi?.id === "ai_core";
 
@@ -59,9 +60,11 @@ export const CoreGeometry: React.FC = () => {
       shaderMaterial.uniforms.uIntensity.value = hovered || isSelected ? 1.8 : 1.2;
     }
 
-    // Gentle global hover float
+    // Gentle global hover float & CV Pinch Scale interpolation
     if (coreGroupRef.current) {
       coreGroupRef.current.position.y = 5 + Math.sin(time * 1.2) * 0.25;
+      const nextScale = THREE.MathUtils.lerp(coreGroupRef.current.scale.x, objectScale, 0.16);
+      coreGroupRef.current.scale.setScalar(nextScale);
     }
 
     // Outer shell breathing & slow spin

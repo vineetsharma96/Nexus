@@ -43,6 +43,14 @@ export const SceneCommandSchema = z.discriminatedUnion("action", [
     action: z.literal("set_quality"),
     tier: z.enum(["ultra", "high", "medium", "low"]),
   }),
+  z.object({
+    action: z.literal("scale_object"),
+    scale: z.number().min(0.2).max(3.5),
+  }),
+  z.object({
+    action: z.literal("toggle_ar"),
+    enabled: z.boolean(),
+  }),
 ]);
 
 export type SceneCommand = z.infer<typeof SceneCommandSchema>;

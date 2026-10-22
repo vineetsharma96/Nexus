@@ -32,6 +32,10 @@ export const ToolsCluster: React.FC = () => {
         child.rotation.y = time * 0.4 + idx;
         child.position.y = Math.sin(time * 2 + idx) * 0.2;
       });
+      const currentScale = useWorldStore.getState().objectScale;
+      const targetS = !selectedPoi || isSelected ? currentScale : 1.0;
+      const nextS = THREE.MathUtils.lerp(groupRef.current.scale.x, targetS, 0.16);
+      groupRef.current.scale.setScalar(nextS);
     }
   });
 

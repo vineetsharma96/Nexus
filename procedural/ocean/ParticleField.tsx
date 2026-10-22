@@ -182,6 +182,10 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
     } else {
       pointsRef.current.rotation.set(0, 0, 0);
     }
+
+    const targetScale = useWorldStore.getState().objectScale;
+    const nextScale = THREE.MathUtils.lerp(pointsRef.current.scale.x, targetScale, 0.16);
+    pointsRef.current.scale.setScalar(nextScale);
   });
 
   return (
