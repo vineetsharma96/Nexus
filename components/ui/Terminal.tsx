@@ -139,23 +139,23 @@ export const Terminal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md font-mono">
-      <div className="relative w-full max-w-2xl glass-panel-glow rounded-lg border border-cyan-500/40 p-6 flex flex-col h-[520px] max-h-[85dvh] shadow-[0_0_50px_rgba(0,240,255,0.2)]">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-md font-mono">
+      <div className="relative w-full max-w-2xl glass-panel-glow rounded-lg border border-cyan-500/40 p-3.5 sm:p-6 flex flex-col h-[82dvh] sm:h-[520px] max-h-[85dvh] shadow-[0_0_50px_rgba(0,240,255,0.2)]">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
-          <div className="flex items-center space-x-2.5">
-            <TerminalIcon className="w-5 h-5 text-cyan-400" />
-            <span className="text-sm font-bold text-white tracking-widest">
+        <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-white/10 mb-3 sm:mb-4 gap-2">
+          <div className="flex items-center space-x-2 min-w-0">
+            <TerminalIcon className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+            <span className="text-xs sm:text-sm font-bold text-white tracking-widest truncate">
               NEXUS COGNITIVE TERMINAL
             </span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 flex items-center gap-1">
+            <span className="hidden sm:flex text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 items-center gap-1 shrink-0">
               <Shield className="w-3 h-3 text-cyan-400" />
               <span>SCHEMA VALIDATED</span>
             </span>
           </div>
           <button
             onClick={() => setTerminalOpen(false)}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
           >
             <X className="w-5 h-5" />
           </button>

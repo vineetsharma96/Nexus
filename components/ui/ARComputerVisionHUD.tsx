@@ -547,23 +547,24 @@ export const ARComputerVisionHUD: React.FC = () => {
         )}
       </div>
 
-      {/* 2. Floating Quick-Access AR & Computer Vision Control Bar (Top Left below header) */}
-      <div className="fixed top-20 left-4 md:left-6 z-30 flex flex-wrap items-center gap-2 font-mono pointer-events-auto">
+      {/* 2. Floating Quick-Access AR & Computer Vision Control Bar (Top Left below header/zone bar) */}
+      <div className="fixed top-[92px] sm:top-[108px] lg:top-20 left-2.5 sm:left-4 md:left-6 z-30 flex items-center gap-1.5 sm:gap-2 font-mono pointer-events-auto">
         <button
           type="button"
           onClick={() => {
             ProceduralAudio.playSelect();
             toggleArMode();
           }}
-          className={`px-3 py-1.5 rounded text-xs border transition-all flex items-center space-x-2 shadow-lg cursor-pointer ${
+          className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs border transition-all flex items-center space-x-1.5 shadow-lg cursor-pointer ${
             isArMode
               ? "bg-emerald-500/30 text-emerald-200 border-emerald-400 shadow-[0_0_18px_rgba(16,185,129,0.5)] font-bold"
               : "glass-panel text-slate-300 hover:text-white hover:border-emerald-400/50 border-white/10"
           }`}
           title="Toggle Augmented Reality Camera Passthrough"
         >
-          <Eye className="w-3.5 h-3.5 text-emerald-400" />
-          <span>{isArMode ? "AR MODE: ON" : "AR MODE"}</span>
+          <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
+          <span className="sm:hidden">{isArMode ? "AR: ON" : "AR"}</span>
+          <span className="hidden sm:inline">{isArMode ? "AR MODE: ON" : "AR MODE"}</span>
         </button>
 
         <button
@@ -572,19 +573,20 @@ export const ARComputerVisionHUD: React.FC = () => {
             ProceduralAudio.playSelect();
             toggleCvEnabled();
           }}
-          className={`px-3 py-1.5 rounded text-xs border transition-all flex items-center space-x-2 shadow-lg cursor-pointer ${
+          className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs border transition-all flex items-center space-x-1.5 shadow-lg cursor-pointer ${
             isCvEnabled
               ? "bg-cyan-500/30 text-cyan-200 border-cyan-400 shadow-[0_0_18px_rgba(0,240,255,0.45)] font-bold"
               : "glass-panel text-slate-300 hover:text-white hover:border-cyan-400/50 border-white/10"
           }`}
           title="Toggle Computer Vision Hand Pinch Scaling"
         >
-          <Hand className="w-3.5 h-3.5 text-cyan-400" />
-          <span>{isCvEnabled ? "CV PINCH: ACTIVE" : "CV PINCH"}</span>
+          <Hand className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400 shrink-0" />
+          <span className="sm:hidden">{isCvEnabled ? "PINCH: ON" : "PINCH"}</span>
+          <span className="hidden sm:inline">{isCvEnabled ? "CV PINCH: ACTIVE" : "CV PINCH"}</span>
         </button>
 
         {/* Live Scale Readout & Quick Pinch Buttons */}
-        <div className="glass-panel px-2.5 py-1 rounded border border-white/10 flex items-center space-x-1.5 text-xs">
+        <div className="glass-panel px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded border border-white/10 flex items-center space-x-1 sm:space-x-1.5 text-[10px] sm:text-xs">
           <button
             type="button"
             onClick={() => {
@@ -595,10 +597,10 @@ export const ARComputerVisionHUD: React.FC = () => {
             className="p-1 rounded hover:bg-white/10 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer"
             title="Pinch Object Smaller (-)"
           >
-            <Minimize2 className="w-3.5 h-3.5" />
+            <Minimize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </button>
 
-          <span className="text-[11px] font-bold text-cyan-300 min-w-[46px] text-center">
+          <span className="text-[10px] sm:text-[11px] font-bold text-cyan-300 min-w-[38px] sm:min-w-[46px] text-center">
             {objectScale.toFixed(2)}x
           </span>
 
@@ -612,7 +614,7 @@ export const ARComputerVisionHUD: React.FC = () => {
             className="p-1 rounded hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
             title="Pinch Object Bigger (+)"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
+            <Maximize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           </button>
 
           {Math.abs(objectScale - 1.0) > 0.05 && (
@@ -635,9 +637,9 @@ export const ARComputerVisionHUD: React.FC = () => {
 
       {/* 3. Computer Vision Hand Tracking & Pinch Inspector Panel */}
       {isCvEnabled && (
-        <div className="fixed top-32 left-4 md:left-6 z-30 w-80 max-w-[calc(100vw-2rem)] glass-panel-glow p-4 rounded-lg border border-cyan-500/40 text-xs font-mono shadow-[0_0_35px_rgba(0,240,255,0.2)] pointer-events-auto">
+        <div className="fixed top-[130px] sm:top-[148px] lg:top-32 left-2.5 right-2.5 sm:left-4 md:left-6 sm:right-auto z-30 sm:w-80 max-h-[calc(100dvh-185px)] overflow-y-auto glass-panel-glow p-3.5 sm:p-4 rounded-lg border border-cyan-500/40 text-xs font-mono shadow-[0_0_35px_rgba(0,240,255,0.2)] pointer-events-auto">
           {/* Header */}
-          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-white/10">
+          <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10">
             <div className="flex items-center space-x-2">
               <Scan className="w-4 h-4 text-cyan-400 animate-pulse" />
               <span className="font-bold text-white tracking-wider text-[11px]">
@@ -670,7 +672,7 @@ export const ARComputerVisionHUD: React.FC = () => {
           </div>
 
           {/* Live Webcam Feed + 21-Landmark Skeleton Canvas Overlay */}
-          <div className="relative w-full h-44 rounded bg-slate-950 border border-cyan-500/30 overflow-hidden mb-3">
+          <div className="relative w-full h-32 sm:h-44 rounded bg-slate-950 border border-cyan-500/30 overflow-hidden mb-2.5">
             <video
               ref={hudVideoRef}
               playsInline

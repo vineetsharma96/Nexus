@@ -12,6 +12,9 @@ export const MobileNavControls: React.FC = () => {
   const resetWorld = useWorldStore((state) => state.resetWorld);
   const isBooted = useWorldStore((state) => state.isBooted);
   const isTerminalOpen = useWorldStore((state) => state.isTerminalOpen);
+  const selectedPoi = useWorldStore((state) => state.selectedPoi);
+  const isTourActive = useWorldStore((state) => state.isTourActive);
+  const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -22,7 +25,9 @@ export const MobileNavControls: React.FC = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  if (!isMobile || !isBooted || isTerminalOpen) return null;
+  if (!isMobile || !isBooted || isTerminalOpen || selectedPoi || isTourActive || isCvEnabled) {
+    return null;
+  }
 
   const ZONE_CYCLE: ZoneId[] = ["core", "code_city", "data_ocean", "ai_lab"];
 
@@ -37,7 +42,7 @@ export const MobileNavControls: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-24 right-4 z-30 flex flex-col items-center space-y-1.5 font-mono pointer-events-auto select-none">
+    <div className="fixed bottom-14 right-2.5 z-20 flex flex-col items-center space-y-1.5 font-mono pointer-events-auto select-none">
       {/* Step Next Zone */}
       <button
         onClick={handleNext}
