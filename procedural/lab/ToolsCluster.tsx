@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useWorldStore } from "@/engine/store/useWorldStore";
@@ -26,6 +26,13 @@ export const ToolsCluster: React.FC = () => {
   const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === "tools";
+
+  const hexEdgesGeometry = useMemo(() => {
+    const cyl = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 6);
+    const edges = new THREE.EdgesGeometry(cyl);
+    cyl.dispose();
+    return edges;
+  }, []);
 
   useFrame((_state, delta) => {
     if (!isActivityPaused) {
@@ -94,8 +101,7 @@ export const ToolsCluster: React.FC = () => {
               </mesh>
 
               {/* Wireframe Outline */}
-              <lineSegments scale={isHovered ? 1.28 : 1.03}>
-                <edgesGeometry args={[new THREE.CylinderGeometry(0.5, 0.5, 0.4, 6)]} />
+              <lineSegments geometry={hexEdgesGeometry} scale={isHovered ? 1.28 : 1.03}>
                 <lineBasicMaterial color={tool.color} />
               </lineSegments>
             </group>

@@ -23,7 +23,6 @@ export const CoreGeometry: React.FC = () => {
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
   const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
-  const objectScale = useWorldStore((state) => state.objectScale);
   const simTimeRef = useRef(0);
 
   const isSelected = selectedPoi?.id === "ai_core";
@@ -65,10 +64,11 @@ export const CoreGeometry: React.FC = () => {
       shaderMaterial.uniforms.uIntensity.value = hovered || isSelected ? 1.8 : 1.2;
     }
 
-    // Gentle global hover float & CV Pinch Scale interpolation
+    // Gentle global hover float & CV Pinch Scale interpolation (zero React re-renders)
     if (coreGroupRef.current) {
       coreGroupRef.current.position.y = 5 + Math.sin(time * 1.2) * 0.25;
-      const nextScale = THREE.MathUtils.lerp(coreGroupRef.current.scale.x, objectScale, 0.16);
+      const targetScale = useWorldStore.getState().objectScale;
+      const nextScale = THREE.MathUtils.lerp(coreGroupRef.current.scale.x, targetScale, 0.16);
       coreGroupRef.current.scale.setScalar(nextScale);
     }
 
@@ -190,7 +190,7 @@ export const CoreGeometry: React.FC = () => {
 
       {/* 2. Outer Hero Translucent Displaced Shell (Custom GLSL) */}
       <mesh ref={outerShellRef} material={shaderMaterial}>
-        <sphereGeometry args={[2.8, 64, 64]} />
+        <sphereGeometry args={[2.8, 32, 32]} />
       </mesh>
 
       {/* 3. Outer Geodesic Lattice */}
@@ -206,7 +206,7 @@ export const CoreGeometry: React.FC = () => {
 
       {/* 4. Orbital Torus Ring 1 (Equatorial) */}
       <mesh ref={ring1Ref}>
-        <torusGeometry args={[3.8, 0.05, 16, 100]} />
+        <torusGeometry args={[3.8, 0.05, 12, 64]} />
         <meshStandardMaterial
           color="#00f0ff"
           emissive="#00f0ff"
@@ -218,7 +218,7 @@ export const CoreGeometry: React.FC = () => {
 
       {/* 5. Orbital Torus Ring 2 (Tilted 45°) */}
       <mesh ref={ring2Ref} rotation={[Math.PI / 4, 0, 0]}>
-        <torusGeometry args={[4.6, 0.06, 16, 100]} />
+        <torusGeometry args={[4.6, 0.06, 12, 64]} />
         <meshStandardMaterial
           color="#8b5cf6"
           emissive="#8b5cf6"
@@ -230,7 +230,7 @@ export const CoreGeometry: React.FC = () => {
 
       {/* 6. Orbital Torus Ring 3 (Tilted 75°) */}
       <mesh ref={ring3Ref} rotation={[0, Math.PI / 3, Math.PI / 4]}>
-        <torusGeometry args={[5.4, 0.04, 16, 100]} />
+        <torusGeometry args={[5.4, 0.04, 12, 64]} />
         <meshStandardMaterial
           color="#10b981"
           emissive="#10b981"

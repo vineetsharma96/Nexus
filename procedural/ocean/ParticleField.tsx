@@ -13,7 +13,7 @@ interface ParticleFieldProps {
 }
 
 export const ParticleField: React.FC<ParticleFieldProps> = ({
-  baseCount = 18000,
+  baseCount = 6000,
   origin = [70, -10, 40],
 }) => {
   const pointsRef = useRef<THREE.Points>(null);
@@ -21,7 +21,7 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
   const qualityTier = useWorldStore((state) => state.qualityTier);
 
-  // Quality adaptive count
+  // Quality adaptive count (tuned for 30-60+ FPS on PC Ultra & Mobile High even with AR/CV active)
   const count = useMemo(() => {
     switch (qualityTier) {
       case "ultra":
@@ -119,18 +119,31 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
     }, [count]);
 
   const activeStateRef = useRef<OceanState>(oceanState);
+  const stateChangeTimeRef = useRef<number>(0);
   const simTimeRef = useRef(0);
   const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
 
   useEffect(() => {
     activeStateRef.current = oceanState;
+    stateChangeTimeRef.current = performance.now();
   }, [oceanState]);
 
   useFrame((_state, delta) => {
     if (!pointsRef.current) return;
-    const geom = pointsRef.current.geometry;
-    const posAttr = geom.attributes.position as THREE.BufferAttribute;
-    const posArray = posAttr.array as Float32Array;
+    const storeState = useWorldStore.getState();
+    const targetScale = storeState.objectScale;
+    const nextScale = THREE.MathUtils.lerp(pointsRef.current.scale.x, targetScale, 0.16);
+    pointsRef.current.scale.setScalar(nextScale);
+
+    // Avoid CPU trig loop & 72KB-108KB GPU upload when user is in another zone and ocean transition settled
+    const isNearOcean =
+      storeState.currentZone === "data_ocean" ||
+      storeState.isTourActive ||
+      performance.now() - stateChangeTimeRef.current < 2500;
+
+    if (!isNearOcean) {
+      return;
+    }
 
     if (!isActivityPaused) {
       simTimeRef.current += delta * environmentSpeed;
@@ -143,7 +156,14 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
       particleShaderMaterial.uniforms.uTime.value = time;
     }
 
-    const lerpSpeed = isActivityPaused ? 0 : Math.min(1.0, delta * 3.5);
+    if (isActivityPaused) {
+      return;
+    }
+
+    const geom = pointsRef.current.geometry;
+    const posAttr = geom.attributes.position as THREE.BufferAttribute;
+    const posArray = posAttr.array as Float32Array;
+    const lerpSpeed = Math.min(1.0, delta * 3.5);
 
     for (let i = 0; i < count; i++) {
       const idx = i * 3;
@@ -187,10 +207,6 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
     } else {
       pointsRef.current.rotation.set(0, 0, 0);
     }
-
-    const targetScale = useWorldStore.getState().objectScale;
-    const nextScale = THREE.MathUtils.lerp(pointsRef.current.scale.x, targetScale, 0.16);
-    pointsRef.current.scale.setScalar(nextScale);
   });
 
   return (

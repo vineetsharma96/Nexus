@@ -4,6 +4,10 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useWorldStore, ZONE_ORDER } from "@/engine/store/useWorldStore";
 import { ProceduralAudio } from "@/engine/audio/ProceduralAudio";
 import {
+  createCVGestureWorker,
+  CVWorkerOutboundMessage,
+} from "@/engine/cv/cvGestureWorker";
+import {
   Scan,
   Maximize2,
   Minimize2,
@@ -17,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Camera,
+  BookOpen,
 } from "lucide-react";
 
 // MediaPipe 21 Hand Landmark skeletal connections
@@ -40,6 +45,7 @@ export const ARComputerVisionHUD: React.FC = () => {
   const isBooted = useWorldStore((state) => state.isBooted);
   const isArMode = useWorldStore((state) => state.isArMode);
   const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
+  const isGestureTutorialOpen = useWorldStore((state) => state.isGestureTutorialOpen);
   const objectScale = useWorldStore((state) => state.objectScale);
   const pinchDistance = useWorldStore((state) => state.pinchDistance);
   const pinchState = useWorldStore((state) => state.pinchState);
@@ -52,6 +58,7 @@ export const ARComputerVisionHUD: React.FC = () => {
 
   const toggleArMode = useWorldStore((state) => state.toggleArMode);
   const toggleCvEnabled = useWorldStore((state) => state.toggleCvEnabled);
+  const toggleGestureTutorial = useWorldStore((state) => state.toggleGestureTutorial);
   const setPinchTelemetry = useWorldStore((state) => state.setPinchTelemetry);
   const setActivityPaused = useWorldStore((state) => state.setActivityPaused);
   const cycleZone = useWorldStore((state) => state.cycleZone);
@@ -63,17 +70,15 @@ export const ARComputerVisionHUD: React.FC = () => {
   const arVideoRef = useRef<HTMLVideoElement>(null);
   const hudVideoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const cvDownscaleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const landmarkerRef = useRef<any>(null);
-  const rafRef = useRef<number | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const workerOffscreenSupportedRef = useRef<boolean>(false);
+  const workerBusyRef = useRef<boolean>(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const smoothedScaleRef = useRef<number>(1.0);
-
-  // Multi-gesture tracking refs
-  const fistHoldFramesRef = useRef<number>(0);
-  const palmHoldFramesRef = useRef<number>(0);
-  const swipeHistoryRef = useRef<{ x: number; t: number }[]>([]);
-  const lastZoneSwipeTimeRef = useRef<number>(0);
-  const gestureBannerRef = useRef<{ label: string; color: string; until: number } | null>(null);
+  const lastHandsCountRef = useRef<number>(0);
 
   const [cameraStatus, setCameraStatus] = useState<
     "idle" | "initializing" | "active" | "simulated"
@@ -82,6 +87,7 @@ export const ARComputerVisionHUD: React.FC = () => {
   const [simPinchRatio, setSimPinchRatio] = useState<number>(0.45);
   const [detectedHandsCount, setDetectedHandsCount] = useState<number>(0);
   const [lastGestureLabel, setLastGestureLabel] = useState<string>("READY");
+  const [isWorkerActive, setIsWorkerActive] = useState<boolean>(false);
 
   // Compute target 3D object scale from normalized pinch ratio (0.0 = closed pinch, 1.0 = wide spread)
   const applyPinchRatioToScale = useCallback(
@@ -93,7 +99,7 @@ export const ARComputerVisionHUD: React.FC = () => {
       // Map [0..1] -> [0.25..3.0]
       const targetScale = 0.25 + effectiveRatio * 2.75;
       smoothedScaleRef.current =
-        smoothedScaleRef.current * 0.72 + targetScale * 0.28;
+        smoothedScaleRef.current * 0.68 + targetScale * 0.32;
 
       const gestureState: "idle" | "pinching_small" | "pinching_big" =
         effectiveRatio < 0.32
@@ -116,11 +122,6 @@ export const ARComputerVisionHUD: React.FC = () => {
     const wasPaused = useWorldStore.getState().isActivityPaused;
     setActivityPaused(true);
     setLastGestureLabel("CLENCHED FIST · PAUSED");
-    gestureBannerRef.current = {
-      label: "✊ CLENCHED FIST: ACTIVITY PAUSED",
-      color: "#f59e0b",
-      until: performance.now() + 1800,
-    };
     if (!wasPaused) {
       ProceduralAudio.playHover();
     }
@@ -131,11 +132,6 @@ export const ARComputerVisionHUD: React.FC = () => {
     const wasPaused = useWorldStore.getState().isActivityPaused;
     setActivityPaused(false);
     setLastGestureLabel("OPEN PALM · RESUMED");
-    gestureBannerRef.current = {
-      label: "🖐 OPEN PALM: ACTIVITY RESUMED",
-      color: "#10b981",
-      until: performance.now() + 1800,
-    };
     if (wasPaused) {
       ProceduralAudio.playSelect();
     }
@@ -152,20 +148,12 @@ export const ARComputerVisionHUD: React.FC = () => {
           ? `4-FINGER RIGHT → ${zoneName}`
           : `4-FINGER LEFT ← ${zoneName}`;
       setLastGestureLabel(label);
-      gestureBannerRef.current = {
-        label:
-          direction === "next"
-            ? `🖖 4-FINGER RIGHT ► ${zoneName}`
-            : `◄ 4-FINGER LEFT 🖖 ${zoneName}`,
-        color: "#a855f7",
-        until: performance.now() + 1800,
-      };
       ProceduralAudio.playSelect();
     },
     [cycleZone]
   );
 
-  // Initialize MediaPipe HandLandmarker
+  // Initialize MediaPipe HandLandmarker (numHands: 1 for 2x faster inference in AR/CV)
   const initHandLandmarker = useCallback(async () => {
     if (landmarkerRef.current) return landmarkerRef.current;
     try {
@@ -182,7 +170,7 @@ export const ARComputerVisionHUD: React.FC = () => {
             delegate: "GPU",
           },
           runningMode: "VIDEO",
-          numHands: 2,
+          numHands: 1,
           minHandDetectionConfidence: 0.45,
           minHandPresenceConfidence: 0.45,
           minTrackingConfidence: 0.45,
@@ -205,7 +193,7 @@ export const ARComputerVisionHUD: React.FC = () => {
                 "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
             },
             runningMode: "VIDEO",
-            numHands: 2,
+            numHands: 1,
           }
         );
         landmarkerRef.current = handLandmarker;
@@ -249,7 +237,6 @@ export const ARComputerVisionHUD: React.FC = () => {
           : "rgba(0, 240, 255, 0.55)";
 
       for (const landmarks of landmarksList) {
-        // Draw skeletal bones
         ctx.strokeStyle = boneColor;
         ctx.lineWidth = 1.75;
         for (const [startIdx, endIdx] of HAND_CONNECTIONS) {
@@ -262,7 +249,6 @@ export const ARComputerVisionHUD: React.FC = () => {
           ctx.stroke();
         }
 
-        // Draw joints
         for (let i = 0; i < landmarks.length; i++) {
           const pt = landmarks[i];
           const isPinchTip = i === 4 || i === 8;
@@ -272,8 +258,8 @@ export const ARComputerVisionHUD: React.FC = () => {
             pt.x * width,
             pt.y * height,
             isPinchTip || (detectedMode === "four_finger" && isFourFingerTip)
-              ? 5.5
-              : 3,
+              ? 5
+              : 2.5,
             0,
             Math.PI * 2
           );
@@ -290,7 +276,6 @@ export const ARComputerVisionHUD: React.FC = () => {
           ctx.fill();
         }
 
-        // Draw 4-finger tracking bar when 4 fingers are raised
         if (detectedMode === "four_finger") {
           const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
           if (tips.every(Boolean)) {
@@ -305,7 +290,6 @@ export const ARComputerVisionHUD: React.FC = () => {
           }
         }
 
-        // Draw Pinch Vector when in pinch mode
         if (detectedMode === "pinch") {
           const thumbTip = landmarks[4];
           const indexTip = landmarks[8];
@@ -352,28 +336,44 @@ export const ARComputerVisionHUD: React.FC = () => {
     []
   );
 
-  // Start / Stop Camera & CV Loop when isCvEnabled, isArMode, or arFacingMode changes
+  // Start / Stop Camera & Web Worker Off-Thread CV Pipeline
   useEffect(() => {
     let isCancelled = false;
 
     async function startCameraAndVision() {
-      // Stop any existing stream first so mobile devices release camera hardware cleanly when switching Front/Rear
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      workerBusyRef.current = false;
+      setIsWorkerActive(false);
+
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
       }
 
       if (!isCvEnabled && !isArMode) {
-        if (rafRef.current) cancelAnimationFrame(rafRef.current);
         setCameraStatus("idle");
         setDetectedHandsCount(0);
+        lastHandsCountRef.current = 0;
         return;
       }
 
       setCameraStatus("initializing");
       setCameraError(null);
 
-      const landmarkerPromise = initHandLandmarker();
+      // Prepare lightweight 224x126 offscreen canvas for fallback landmark extraction
+      if (!cvDownscaleCanvasRef.current && typeof document !== "undefined") {
+        const offCanvas = document.createElement("canvas");
+        offCanvas.width = 224;
+        offCanvas.height = 126;
+        cvDownscaleCanvasRef.current = offCanvas;
+      }
 
       let mediaStream: MediaStream | null = null;
       try {
@@ -382,23 +382,37 @@ export const ARComputerVisionHUD: React.FC = () => {
           navigator.mediaDevices &&
           navigator.mediaDevices.getUserMedia
         ) {
+          const isMobileViewport =
+            typeof window !== "undefined" &&
+            (window.innerWidth < 768 ||
+              (navigator.maxTouchPoints && navigator.maxTouchPoints > 1));
+
+          // Mobile uses 480x270 @ 24-30fps to minimize hardware video decode & AR texture bandwidth
+          const videoConstraints = isMobileViewport
+            ? {
+                width: { ideal: 480 },
+                height: { ideal: 270 },
+                frameRate: { ideal: 24, max: 30 },
+              }
+            : {
+                width: { ideal: 640 },
+                height: { ideal: 360 },
+                frameRate: { ideal: 30, max: 30 },
+              };
+
           try {
-            // Try exact facingMode first for reliable Front/Rear switch on mobile
             mediaStream = await navigator.mediaDevices.getUserMedia({
               video: {
+                ...videoConstraints,
                 facingMode: { exact: arFacingMode },
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
               },
               audio: false,
             });
           } catch {
-            // Fallback to ideal facingMode for desktop single-webcam systems
             mediaStream = await navigator.mediaDevices.getUserMedia({
               video: {
+                ...videoConstraints,
                 facingMode: arFacingMode,
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
               },
               audio: false,
             });
@@ -423,219 +437,229 @@ export const ARComputerVisionHUD: React.FC = () => {
 
       streamRef.current = mediaStream;
 
-      if (arVideoRef.current) {
+      if (isArMode && arVideoRef.current) {
         arVideoRef.current.srcObject = mediaStream;
         arVideoRef.current.play().catch(() => {});
       }
-      if (hudVideoRef.current) {
+      if (isCvEnabled && hudVideoRef.current) {
         hudVideoRef.current.srcObject = mediaStream;
         hudVideoRef.current.play().catch(() => {});
       }
 
       setCameraStatus("active");
-      await landmarkerPromise;
+
+      // Only spawn Web Worker and run CV pipeline when Computer Vision is enabled
+      if (!isCvEnabled) {
+        return;
+      }
+
+      // Spawn dedicated CV Gesture Web Worker
+      const worker = createCVGestureWorker();
+      let workerStatusResolved = false;
+
+      if (worker) {
+        workerRef.current = worker;
+        setIsWorkerActive(true);
+
+        const workerReadyPromise = new Promise<boolean>((resolve) => {
+          const timeoutId = setTimeout(() => {
+            if (!workerStatusResolved) {
+              workerStatusResolved = true;
+              resolve(false);
+            }
+          }, 3500);
+
+          worker.onmessage = (evt: MessageEvent<CVWorkerOutboundMessage>) => {
+            const msg = evt.data;
+            if (!msg || isCancelled) return;
+
+            if (msg.type === "CV_WORKER_STATUS") {
+              workerOffscreenSupportedRef.current = msg.offscreenSupported;
+              if (!workerStatusResolved) {
+                workerStatusResolved = true;
+                clearTimeout(timeoutId);
+                resolve(msg.offscreenSupported);
+              }
+              return;
+            }
+
+            if (msg.type === "CV_WORKER_RESULT") {
+              workerBusyRef.current = false;
+
+              if (msg.handsCount !== lastHandsCountRef.current) {
+                lastHandsCountRef.current = msg.handsCount;
+                setDetectedHandsCount(msg.handsCount);
+              }
+
+              if (msg.triggeredAction === "fist_pause") {
+                triggerFistPause();
+              } else if (msg.triggeredAction === "palm_resume") {
+                triggerPalmResume();
+              } else if (msg.triggeredAction === "swipe_next") {
+                triggerFourFingerSwipe("next");
+              } else if (msg.triggeredAction === "swipe_prev") {
+                triggerFourFingerSwipe("prev");
+              } else if (msg.handsCount > 0 && msg.mode === "pinch" && msg.computedRatio !== null) {
+                smoothedScaleRef.current = msg.smoothedScale;
+                useWorldStore
+                  .getState()
+                  .setPinchTelemetry(
+                    msg.computedRatio,
+                    msg.pinchState,
+                    msg.smoothedScale
+                  );
+              } else if (msg.handsCount === 0) {
+                useWorldStore
+                  .getState()
+                  .setPinchTelemetry(null, "idle", undefined);
+              }
+
+              const canvasEl = overlayCanvasRef.current;
+              if (canvasEl) {
+                const ctx = canvasEl.getContext("2d");
+                if (ctx) {
+                  drawHudOverlay(
+                    ctx,
+                    canvasEl.width,
+                    canvasEl.height,
+                    msg.hands,
+                    msg.computedRatio,
+                    msg.mode
+                  );
+                }
+              }
+
+              if (!isCancelled) {
+                const nextDelay = Math.max(
+                  85,
+                  Math.min(180, Math.round((msg.inferMs || 25) * 2.5))
+                );
+                timerRef.current = setTimeout(runCvInferenceTick, nextDelay);
+              }
+            }
+          };
+        });
+
+        worker.postMessage({ type: "INIT_WORKER" });
+        const workerOffscreenOk = await workerReadyPromise;
+
+        // If browser doesn't support OffscreenCanvas WebGL inside Worker, init main-thread detector
+        // while still offloading all 21-landmark gesture classification to the Worker
+        if (!workerOffscreenOk && !isCancelled) {
+          await initHandLandmarker();
+        }
+      } else {
+        await initHandLandmarker();
+      }
 
       let lastVideoTime = -1;
 
-      const detectLoop = () => {
+      // Non-blocking CV tick that dispatches frame to Web Worker with backpressure control
+      const runCvInferenceTick = async () => {
         if (isCancelled) return;
 
+        if (workerBusyRef.current) {
+          timerRef.current = setTimeout(runCvInferenceTick, 60);
+          return;
+        }
+
         const videoEl = hudVideoRef.current || arVideoRef.current;
-        const canvasEl = overlayCanvasRef.current;
-        const landmarker = landmarkerRef.current;
+        const activeWorker = workerRef.current;
 
         if (
           videoEl &&
           videoEl.readyState >= 2 &&
-          landmarker &&
           videoEl.currentTime !== lastVideoTime
         ) {
           lastVideoTime = videoEl.currentTime;
-          try {
-            const now = performance.now();
-            const results = landmarker.detectForVideo(videoEl, now);
-            const hands = results?.landmarks || [];
-            setDetectedHandsCount(hands.length);
+          const now = performance.now();
+          const state = useWorldStore.getState();
 
-            let computedRatio: number | null = null;
-            let currentMode: "pinch" | "fist" | "palm" | "four_finger" = "pinch";
+          // Path A: Full off-thread MediaPipe + Gesture Detection in Web Worker via zero-copy ImageBitmap
+          if (
+            activeWorker &&
+            workerOffscreenSupportedRef.current &&
+            typeof createImageBitmap === "function"
+          ) {
+            try {
+              workerBusyRef.current = true;
+              const bitmap = await createImageBitmap(videoEl, {
+                resizeWidth: 224,
+                resizeHeight: 126,
+              });
+              if (isCancelled) {
+                bitmap.close();
+                return;
+              }
+              activeWorker.postMessage(
+                {
+                  type: "PROCESS_BITMAP",
+                  bitmap,
+                  timestamp: now,
+                  facingMode: state.arFacingMode,
+                  invertPinch: state.invertPinch,
+                },
+                [bitmap]
+              );
+              return;
+            } catch {
+              workerBusyRef.current = false;
+            }
+          }
 
-            if (hands.length >= 1) {
-              const h = hands[0];
-              const wrist = h[0];
-              const thumbTip = h[4];
-              const indexMcp = h[5];
-              const indexPip = h[6];
-              const indexTip = h[8];
-              const middleMcp = h[9];
-              const middlePip = h[10];
-              const middleTip = h[12];
-              const ringMcp = h[13];
-              const ringPip = h[14];
-              const ringTip = h[16];
-              const pinkyMcp = h[17];
-              const pinkyPip = h[18];
-              const pinkyTip = h[20];
-
-              if (wrist && thumbTip && indexTip && middleMcp && pinkyMcp) {
-                const palmSize = Math.max(
-                  0.08,
-                  Math.hypot(wrist.x - middleMcp.x, wrist.y - middleMcp.y)
-                );
-
-                // Check finger extension vs curl for Index, Middle, Ring, Pinky
-                const isFingerExtended = (
-                  tip: { x: number; y: number },
-                  pip: { x: number; y: number },
-                  mcp: { x: number; y: number }
-                ) => {
-                  const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
-                  const dPip = Math.hypot(pip.x - wrist.x, pip.y - wrist.y);
-                  const dMcp = Math.hypot(mcp.x - wrist.x, mcp.y - wrist.y);
-                  return dTip > dPip * 1.07 && dTip > dMcp * 1.3;
-                };
-
-                const isFingerCurled = (
-                  tip: { x: number; y: number },
-                  pip: { x: number; y: number },
-                  mcp: { x: number; y: number }
-                ) => {
-                  const dTip = Math.hypot(tip.x - wrist.x, tip.y - wrist.y);
-                  const dPip = Math.hypot(pip.x - wrist.x, pip.y - wrist.y);
-                  const dTipMcp = Math.hypot(tip.x - mcp.x, tip.y - mcp.y);
-                  return dTip < dPip * 1.05 || dTipMcp < palmSize * 0.78;
-                };
-
-                const idxExt = isFingerExtended(indexTip, indexPip, indexMcp);
-                const midExt = isFingerExtended(middleTip, middlePip, middleMcp);
-                const rngExt = isFingerExtended(ringTip, ringPip, ringMcp);
-                const pnkExt = isFingerExtended(pinkyTip, pinkyPip, pinkyMcp);
-
-                const idxCurl = isFingerCurled(indexTip, indexPip, indexMcp);
-                const midCurl = isFingerCurled(middleTip, middlePip, middleMcp);
-                const rngCurl = isFingerCurled(ringTip, ringPip, ringMcp);
-                const pnkCurl = isFingerCurled(pinkyTip, pinkyPip, pinkyMcp);
-
-                const fourExtended = idxExt && midExt && rngExt && pnkExt;
-                const fourCurled = idxCurl && midCurl && rngCurl && pnkCurl;
-
-                const thumbToPinkyMcp = Math.hypot(
-                  thumbTip.x - pinkyMcp.x,
-                  thumbTip.y - pinkyMcp.y
-                );
-                const thumbToIndexMcp = Math.hypot(
-                  thumbTip.x - indexMcp.x,
-                  thumbTip.y - indexMcp.y
-                );
-                const thumbExtended =
-                  thumbToPinkyMcp > palmSize * 1.05 &&
-                  thumbToIndexMcp > palmSize * 0.55;
-                const thumbTucked = thumbToIndexMcp < palmSize * 0.68;
-
-                // 1. Check Four-Finger Horizontal Swipe (Left / Right)
-                if (fourExtended) {
-                  const rawCentroidX =
-                    (indexTip.x + middleTip.x + ringTip.x + pinkyTip.x) / 4;
-                  // Normalize screen X so moving hand right on screen is always +deltaX
-                  const screenX =
-                    useWorldStore.getState().arFacingMode === "user"
-                      ? 1 - rawCentroidX
-                      : rawCentroidX;
-
-                  swipeHistoryRef.current.push({ x: screenX, t: now });
-                  swipeHistoryRef.current = swipeHistoryRef.current.filter(
-                    (pt) => now - pt.t <= 360
-                  );
-
-                  const oldest = swipeHistoryRef.current[0];
-                  const deltaX = oldest ? screenX - oldest.x : 0;
-
-                  if (
-                    Math.abs(deltaX) > 0.13 &&
-                    now - lastZoneSwipeTimeRef.current > 950
-                  ) {
-                    currentMode = "four_finger";
-                    lastZoneSwipeTimeRef.current = now;
-                    swipeHistoryRef.current = [];
-                    fistHoldFramesRef.current = 0;
-                    palmHoldFramesRef.current = 0;
-                    triggerFourFingerSwipe(deltaX > 0 ? "next" : "prev");
-                  } else if (Math.abs(deltaX) > 0.05) {
-                    currentMode = "four_finger";
-                  } else if (thumbExtended) {
-                    // 2. Stationary Open Palm -> Resume Activity
-                    currentMode = "palm";
-                    palmHoldFramesRef.current += 1;
-                    fistHoldFramesRef.current = 0;
-                    if (palmHoldFramesRef.current === 3) {
-                      triggerPalmResume();
-                    }
-                  } else {
-                    currentMode = "four_finger";
-                  }
-                } else if (fourCurled && thumbTucked) {
-                  // 3. Clenched Fist -> Pause Activity
-                  currentMode = "fist";
-                  fistHoldFramesRef.current += 1;
-                  palmHoldFramesRef.current = 0;
-                  swipeHistoryRef.current = [];
-                  if (fistHoldFramesRef.current === 3) {
-                    triggerFistPause();
-                  }
-                } else {
-                  // 4. Thumb + Index Pinch Scaling
-                  currentMode = "pinch";
-                  fistHoldFramesRef.current = 0;
-                  palmHoldFramesRef.current = 0;
-                  swipeHistoryRef.current = [];
-
-                  const rawPinchDist = Math.hypot(
-                    thumbTip.x - indexTip.x,
-                    thumbTip.y - indexTip.y
-                  );
-                  const normalized = (rawPinchDist / palmSize - 0.18) / 0.95;
-                  computedRatio = Math.max(0, Math.min(1, normalized));
-                  applyPinchRatioToScale(computedRatio);
+          // Path B: Fallback landmark extraction + Web Worker gesture classification
+          const landmarker = landmarkerRef.current;
+          const offscreenEl = cvDownscaleCanvasRef.current;
+          if (landmarker && activeWorker) {
+            try {
+              let inputSource: HTMLVideoElement | HTMLCanvasElement = videoEl;
+              if (offscreenEl) {
+                const offCtx = offscreenEl.getContext("2d", {
+                  willReadFrequently: true,
+                });
+                if (offCtx) {
+                  offCtx.drawImage(videoEl, 0, 0, 224, 126);
+                  inputSource = offscreenEl;
                 }
               }
-            } else {
-              fistHoldFramesRef.current = 0;
-              palmHoldFramesRef.current = 0;
-              swipeHistoryRef.current = [];
-              useWorldStore
-                .getState()
-                .setPinchTelemetry(null, "idle", undefined);
+              const results = landmarker.detectForVideo(inputSource, now);
+              const hands = results?.landmarks || [];
+              workerBusyRef.current = true;
+              activeWorker.postMessage({
+                type: "CLASSIFY_LANDMARKS",
+                hands,
+                timestamp: now,
+                facingMode: state.arFacingMode,
+                invertPinch: state.invertPinch,
+              });
+              return;
+            } catch {
+              workerBusyRef.current = false;
             }
-
-            if (canvasEl) {
-              const ctx = canvasEl.getContext("2d");
-              if (ctx) {
-                drawHudOverlay(
-                  ctx,
-                  canvasEl.width,
-                  canvasEl.height,
-                  hands,
-                  computedRatio,
-                  currentMode
-                );
-              }
-            }
-          } catch {
-            // Ignore transient frame detection error
           }
         }
 
-        rafRef.current = requestAnimationFrame(detectLoop);
+        if (!isCancelled) {
+          timerRef.current = setTimeout(runCvInferenceTick, 90);
+        }
       };
 
-      rafRef.current = requestAnimationFrame(detectLoop);
+      timerRef.current = setTimeout(runCvInferenceTick, 85);
     }
 
     startCameraAndVision();
 
     return () => {
       isCancelled = true;
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+      workerBusyRef.current = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
@@ -746,34 +770,28 @@ export const ARComputerVisionHUD: React.FC = () => {
   return (
     <>
       {/* 1. Full-Screen Augmented Reality (AR) Camera Passthrough Layer */}
-      <div
-        className={`fixed inset-0 pointer-events-none transition-opacity duration-500 ${
-          isArMode ? "opacity-100 z-0" : "opacity-0 -z-10"
-        }`}
-      >
-        <video
-          ref={arVideoRef}
-          playsInline
-          muted
-          autoPlay
-          className={`w-full h-full object-cover ${
-            arFacingMode === "user" ? "scale-x-[-1]" : ""
-          }`}
-        />
-
-        {/* Fallback Cyber AR Grid Environment if camera permission is declined in AR mode */}
-        {isArMode && cameraStatus === "simulated" && (
-          <div
-            className="absolute inset-0"
-            style={{
-              background:
-                "radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.18) 0%, rgba(3, 7, 18, 0.85) 80%)",
-            }}
+      {isArMode && (
+        <div className="fixed inset-0 pointer-events-none z-0">
+          <video
+            ref={arVideoRef}
+            playsInline
+            muted
+            autoPlay
+            className={`w-full h-full object-cover ${
+              arFacingMode === "user" ? "scale-x-[-1]" : ""
+            }`}
           />
-        )}
 
-        {/* AR Spatial Optical Reticle Overlay */}
-        {isArMode && (
+          {cameraStatus === "simulated" && (
+            <div
+              className="absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.18) 0%, rgba(3, 7, 18, 0.85) 80%)",
+              }}
+            />
+          )}
+
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-64 h-64 sm:w-88 sm:h-88 rounded-full border border-cyan-400/25 flex items-center justify-center relative">
               <div className="w-4 h-4 border-t-2 border-l-2 border-cyan-400 absolute top-5 left-5" />
@@ -785,8 +803,8 @@ export const ARComputerVisionHUD: React.FC = () => {
               </div>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* 2. Non-Overlapping AR & Computer Vision Control Strip (Left-bounded before Sandbox button) */}
       <div className="fixed top-[94px] sm:top-[110px] lg:top-[76px] left-2.5 sm:left-4 md:left-6 right-[96px] sm:right-[132px] z-30 flex items-center gap-1 sm:gap-1.5 font-mono pointer-events-auto overflow-x-auto no-scrollbar">
@@ -854,7 +872,26 @@ export const ARComputerVisionHUD: React.FC = () => {
           </span>
         </button>
 
-        {/* Activity Pause / Resume Status Button (Fist = Pause, Open Palm = Resume) */}
+        {/* Interactive Gesture Tutorial Trigger Button */}
+        <button
+          type="button"
+          onClick={() => {
+            ProceduralAudio.playSelect();
+            toggleGestureTutorial();
+          }}
+          className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs border transition-all flex items-center space-x-1 shadow-lg cursor-pointer whitespace-nowrap shrink-0 ${
+            isGestureTutorialOpen
+              ? "bg-purple-500/30 text-purple-200 border-purple-400 font-bold"
+              : "glass-panel text-purple-300 hover:text-white hover:border-purple-400/50 border-purple-400/30"
+          }`}
+          title="Open Interactive Hand Gesture Tutorial (Fist, Palm, 4-Finger Swipe)"
+        >
+          <BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-400 shrink-0" />
+          <span className="sm:hidden">GUIDE</span>
+          <span className="hidden sm:inline">GESTURE TUTORIAL</span>
+        </button>
+
+        {/* Activity Pause / Resume Status Button */}
         <button
           type="button"
           onClick={() => {
@@ -878,19 +915,19 @@ export const ARComputerVisionHUD: React.FC = () => {
           {isActivityPaused ? (
             <>
               <Play className="w-3 h-3 text-amber-400 shrink-0" />
-              <span className="hidden md:inline">PAUSED (PALM TO RESUME)</span>
-              <span className="md:hidden">PAUSED</span>
+              <span className="hidden xl:inline">PAUSED (PALM TO RESUME)</span>
+              <span className="xl:hidden">PAUSED</span>
             </>
           ) : (
             <>
               <Pause className="w-3 h-3 text-emerald-400 shrink-0" />
-              <span className="hidden md:inline">LIVE</span>
+              <span className="hidden xl:inline">LIVE</span>
             </>
           )}
         </button>
 
         {/* Compact Scale Readout & Quick Pinch Buttons */}
-        <div className="hidden sm:flex glass-panel px-2 py-0.5 sm:py-1 rounded border border-white/10 items-center space-x-1 text-[10px] sm:text-xs shrink-0">
+        <div className="hidden md:flex glass-panel px-2 py-0.5 sm:py-1 rounded border border-white/10 items-center space-x-1 text-[10px] sm:text-xs shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -950,19 +987,34 @@ export const ARComputerVisionHUD: React.FC = () => {
         >
           {/* Header */}
           <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-white/10 gap-2">
-            <div className="flex items-center space-x-2 min-w-0">
-              <Scan className="w-4 h-4 text-cyan-400 animate-pulse shrink-0" />
+            <div className="flex items-center space-x-1.5 min-w-0">
+              <Scan className="w-4 h-4 text-cyan-400 shrink-0" />
               <span className="font-bold text-white tracking-wider text-[11px] truncate">
                 AR & CV GESTURE ENGINE
               </span>
+              {isWorkerActive && (
+                <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-[8px] text-emerald-300 font-bold shrink-0">
+                  WORKER
+                </span>
+              )}
             </div>
-            <button
-              type="button"
-              onClick={toggleCvEnabled}
-              className="px-2 py-0.5 rounded text-[10px] text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer shrink-0"
-            >
-              HIDE
-            </button>
+            <div className="flex items-center space-x-1 shrink-0">
+              <button
+                type="button"
+                onClick={toggleGestureTutorial}
+                className="px-2 py-0.5 rounded text-[10px] text-purple-300 hover:text-white bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/40 cursor-pointer"
+                title="Open Interactive Gesture Tutorial"
+              >
+                TUTORIAL
+              </button>
+              <button
+                type="button"
+                onClick={toggleCvEnabled}
+                className="px-2 py-0.5 rounded text-[10px] text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 cursor-pointer"
+              >
+                HIDE
+              </button>
+            </div>
           </div>
 
           {/* Dedicated Front / Rear Camera Switcher Bar inside AR/CV Panel */}
@@ -1001,7 +1053,7 @@ export const ARComputerVisionHUD: React.FC = () => {
           </div>
 
           {/* Live Webcam Feed + 21-Landmark Skeleton Canvas Overlay */}
-          <div className="relative w-full h-28 sm:h-40 rounded bg-slate-950 border border-cyan-500/30 overflow-hidden mb-2.5">
+          <div className="relative w-full h-28 sm:h-36 rounded bg-slate-950 border border-cyan-500/30 overflow-hidden mb-2.5">
             <video
               ref={hudVideoRef}
               playsInline
@@ -1013,8 +1065,8 @@ export const ARComputerVisionHUD: React.FC = () => {
             />
             <canvas
               ref={overlayCanvasRef}
-              width={320}
-              height={160}
+              width={256}
+              height={144}
               className={`absolute inset-0 w-full h-full pointer-events-none ${
                 arFacingMode === "user" ? "scale-x-[-1]" : ""
               }`}
@@ -1026,9 +1078,9 @@ export const ARComputerVisionHUD: React.FC = () => {
                 <span
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                     cameraStatus === "active"
-                      ? "bg-emerald-400 animate-ping"
+                      ? "bg-emerald-400"
                       : cameraStatus === "initializing"
-                      ? "bg-amber-400 animate-pulse"
+                      ? "bg-amber-400"
                       : "bg-cyan-400"
                   }`}
                 />
@@ -1048,7 +1100,6 @@ export const ARComputerVisionHUD: React.FC = () => {
               </span>
             </div>
 
-            {/* Interactive Virtual Hand Simulator when no physical camera is active */}
             {cameraStatus !== "active" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-2.5 pt-6 bg-slate-950/90 text-center">
                 <div className="relative w-36 h-11 bg-slate-900/90 rounded border border-cyan-500/30 flex items-center justify-center mb-1.5">
@@ -1075,7 +1126,6 @@ export const ARComputerVisionHUD: React.FC = () => {
               </div>
             )}
 
-            {/* Real-Time Gesture Banner at bottom of camera view */}
             <div className="absolute bottom-0 inset-x-0 bg-slate-950/90 px-2 py-1 border-t border-white/10 flex items-center justify-between text-[9px] gap-1">
               <span className="text-slate-400 truncate">
                 GESTURE: <strong className="text-cyan-300">{lastGestureLabel}</strong>
@@ -1147,7 +1197,7 @@ export const ARComputerVisionHUD: React.FC = () => {
             </div>
           </div>
 
-          {/* CV Feature 3: 4-Finger Left/Right Swipe Zone Navigation (Core, City, Ocean, Lab) */}
+          {/* CV Feature 3: 4-Finger Left/Right Swipe Zone Navigation */}
           <div className="mb-2.5 p-2 rounded bg-black/40 border border-white/10">
             <div className="flex items-center justify-between text-[9px] text-slate-400 mb-1.5">
               <span>4-FINGER SWIPE (LEFT / RIGHT)</span>
@@ -1186,7 +1236,6 @@ export const ARComputerVisionHUD: React.FC = () => {
               </button>
             </div>
 
-            {/* 4-Zone Sequence Indicator Strip */}
             <div className="grid grid-cols-4 gap-1">
               {ZONE_ORDER.map((zId) => {
                 const active = currentZone === zId;
@@ -1236,7 +1285,6 @@ export const ARComputerVisionHUD: React.FC = () => {
               />
             </div>
 
-            {/* Gesture Direction Polarity Switch */}
             <button
               type="button"
               onClick={() => {

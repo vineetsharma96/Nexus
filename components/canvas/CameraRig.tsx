@@ -38,7 +38,11 @@ export const CameraRig: React.FC = () => {
   const zoomFactor = useRef(1.0);
   const initialPinchDistance = useRef<number | null>(null);
 
-  // Auto-detect mobile devices & set initial capability tier
+  // Pre-allocated scratch vectors for zero-GC useFrame loop
+  const effectiveCamPos = useRef(new THREE.Vector3());
+  const dirVec = useRef(new THREE.Vector3());
+
+  // Auto-detect mobile devices & set initial capability tier to HIGH (PC stays ULTRA)
   useEffect(() => {
     if (typeof window !== "undefined") {
       const isMobileDevice =
@@ -47,8 +51,8 @@ export const CameraRig: React.FC = () => {
 
       if (isMobileDevice) {
         const currentTier = useWorldStore.getState().qualityTier;
-        if (currentTier === "ultra" || currentTier === "high") {
-          useWorldStore.getState().setQualityTier("medium");
+        if (currentTier === "ultra") {
+          useWorldStore.getState().setQualityTier("high");
         }
       }
     }
@@ -150,27 +154,27 @@ export const CameraRig: React.FC = () => {
   }, [gl]);
 
   useFrame((state) => {
-    const effectiveCamPos = targetCamPos.current.clone();
+    const camPos = effectiveCamPos.current.copy(targetCamPos.current);
 
     // Desktop pointer parallax & Mobile touch drag
     if (!isReducedMotion && !isTourActive) {
-      effectiveCamPos.x += state.pointer.x * 1.5 + touchOffset.current.x;
-      effectiveCamPos.y += state.pointer.y * 1.0 + touchOffset.current.y;
+      camPos.x += state.pointer.x * 1.5 + touchOffset.current.x;
+      camPos.y += state.pointer.y * 1.0 + touchOffset.current.y;
 
       // Apply pinch zoom scale relative to target lookAt
-      const dir = effectiveCamPos.clone().sub(currentLookAt.current);
-      effectiveCamPos.copy(currentLookAt.current).add(dir.multiplyScalar(zoomFactor.current));
+      dirVec.current.copy(camPos).sub(currentLookAt.current);
+      camPos.copy(currentLookAt.current).add(dirVec.current.multiplyScalar(zoomFactor.current));
     }
 
     // Slow orbital drift when tour is active
     if (isTourActive) {
       const time = state.clock.getElapsedTime();
-      effectiveCamPos.x += Math.sin(time * 0.3) * 0.8;
-      effectiveCamPos.y += Math.cos(time * 0.2) * 0.4;
+      camPos.x += Math.sin(time * 0.3) * 0.8;
+      camPos.y += Math.cos(time * 0.2) * 0.4;
     }
 
     // Smooth continuous spring lerp
-    camera.position.lerp(effectiveCamPos, 0.06);
+    camera.position.lerp(camPos, 0.06);
     currentLookAt.current.lerp(targetLookAt.current, 0.06);
     camera.lookAt(currentLookAt.current);
   });

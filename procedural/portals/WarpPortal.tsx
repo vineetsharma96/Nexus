@@ -89,21 +89,18 @@ export const WarpPortal: React.FC<WarpPortalProps> = ({
       }}
       onClick={handleClick}
     >
-      {/* Dynamic Light Source */}
-      <pointLight color={color} intensity={hovered ? 4.5 : 2.2} distance={16} />
-
       {/* 1. Custom GLSL Relativistic Accretion Event Horizon Disc */}
       <mesh ref={horizonRef} material={portalMaterial}>
-        <circleGeometry args={[2.2, 48]} />
+        <circleGeometry args={[2.2, 32]} />
       </mesh>
 
       {/* 2. Concentric Outer Segmented Ring */}
       <mesh ref={outerRingRef}>
-        <torusGeometry args={[2.5, 0.08, 16, 32]} />
+        <torusGeometry args={[2.5, 0.08, 12, 32]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={hovered ? 2.8 : 1.2}
+          emissiveIntensity={hovered ? 2.8 : 1.4}
           roughness={0.2}
           metalness={0.8}
         />
@@ -111,7 +108,7 @@ export const WarpPortal: React.FC<WarpPortalProps> = ({
 
       {/* 3. Inner Counter-Rotating Ring */}
       <mesh ref={innerRingRef}>
-        <torusGeometry args={[2.1, 0.05, 16, 24]} />
+        <torusGeometry args={[2.1, 0.05, 12, 24]} />
         <meshStandardMaterial
           color="#ffffff"
           emissive={color}
@@ -121,7 +118,7 @@ export const WarpPortal: React.FC<WarpPortalProps> = ({
 
       {/* 4. Base Plinth */}
       <mesh position={[0, -2.6, 0]}>
-        <cylinderGeometry args={[1.5, 2.0, 0.4, 16]} />
+        <cylinderGeometry args={[1.5, 2.0, 0.4, 12]} />
         <meshStandardMaterial color="#0f172a" roughness={0.7} metalness={0.8} />
       </mesh>
     </group>

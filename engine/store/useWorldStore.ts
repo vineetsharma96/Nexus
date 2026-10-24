@@ -48,6 +48,8 @@ export interface WorldState {
   // AR & Computer Vision Gestures
   isArMode: boolean;
   isCvEnabled: boolean;
+  isGestureTutorialOpen: boolean;
+  hasSeenGestureTutorial: boolean;
   objectScale: number;
   pinchDistance: number | null;
   pinchState: "idle" | "pinching_small" | "pinching_big";
@@ -74,6 +76,8 @@ export interface WorldState {
   toggleTerminal: () => void;
   setSandboxOpen: (open: boolean) => void;
   toggleSandbox: () => void;
+  setGestureTutorialOpen: (open: boolean) => void;
+  toggleGestureTutorial: () => void;
   startTour: () => void;
   toggleTourPause: () => void;
   goToTourStep: (step: number) => void;
@@ -104,7 +108,7 @@ export const useWorldStore = create<WorldState>((set) => ({
   selectedPoi: null,
   inspectedNodeId: null,
 
-  qualityTier: "high",
+  qualityTier: "ultra",
   fps: 60,
   oceanState: "wave",
   environmentSpeed: 1.0,
@@ -128,6 +132,8 @@ export const useWorldStore = create<WorldState>((set) => ({
 
   isArMode: false,
   isCvEnabled: false,
+  isGestureTutorialOpen: false,
+  hasSeenGestureTutorial: false,
   objectScale: 1.0,
   pinchDistance: null,
   pinchState: "idle",
@@ -196,7 +202,6 @@ export const useWorldStore = create<WorldState>((set) => ({
   setSandboxOpen: (isSandboxOpen) =>
     set((state) => ({
       isSandboxOpen,
-      // Prevent mobile overlap with CV panel if screen is narrow
       isCvEnabled:
         isSandboxOpen && typeof window !== "undefined" && window.innerWidth < 640
           ? false
@@ -213,6 +218,16 @@ export const useWorldStore = create<WorldState>((set) => ({
             : state.isCvEnabled,
       };
     }),
+  setGestureTutorialOpen: (isGestureTutorialOpen) =>
+    set({
+      isGestureTutorialOpen,
+      hasSeenGestureTutorial: true,
+    }),
+  toggleGestureTutorial: () =>
+    set((state) => ({
+      isGestureTutorialOpen: !state.isGestureTutorialOpen,
+      hasSeenGestureTutorial: true,
+    })),
 
   startTour: () =>
     set({
@@ -223,6 +238,7 @@ export const useWorldStore = create<WorldState>((set) => ({
       currentZone: "core",
       selectedPoi: null,
       isSandboxOpen: false,
+      isGestureTutorialOpen: false,
     }),
   toggleTourPause: () => set((state) => ({ isTourPaused: !state.isTourPaused })),
   goToTourStep: (step) =>
@@ -321,20 +337,31 @@ export const useWorldStore = create<WorldState>((set) => ({
       objectScale: Math.max(0.2, Math.min(3.5, scale)),
     }),
   setPinchTelemetry: (pinchDistance, pinchState, scale) =>
-    set((state) => ({
-      pinchDistance,
-      pinchState,
-      cvGesture:
-        pinchState === "pinching_big" || pinchState === "pinching_small"
-          ? pinchState
-          : state.cvGesture === "pinching_big" || state.cvGesture === "pinching_small"
-          ? "idle"
-          : state.cvGesture,
-      objectScale:
+    set((state) => {
+      const nextScale =
         scale !== undefined
           ? Math.max(0.2, Math.min(3.5, scale))
-          : state.objectScale,
-    })),
+          : state.objectScale;
+      // Avoid redundant store updates when values haven't meaningfully changed
+      if (
+        state.pinchState === pinchState &&
+        Math.abs((state.pinchDistance ?? 0) - (pinchDistance ?? 0)) < 0.02 &&
+        Math.abs(state.objectScale - nextScale) < 0.02
+      ) {
+        return state;
+      }
+      return {
+        pinchDistance,
+        pinchState,
+        cvGesture:
+          pinchState === "pinching_big" || pinchState === "pinching_small"
+            ? pinchState
+            : state.cvGesture === "pinching_big" || state.cvGesture === "pinching_small"
+            ? "idle"
+            : state.cvGesture,
+        objectScale: nextScale,
+      };
+    }),
   setCvGesture: (cvGesture) => set({ cvGesture }),
   toggleInvertPinch: () =>
     set((state) => ({ invertPinch: !state.invertPinch })),

@@ -15,8 +15,14 @@ const eslintConfig = defineConfig([
     "scripts/**",
     ".agents/**",
     ".claude/**",
+    "agent/**",
   ]),
   {
+    settings: {
+      react: {
+        version: "19.2",
+      },
+    },
     rules: {
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-unused-vars": "warn",

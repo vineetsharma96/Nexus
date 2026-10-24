@@ -51,6 +51,43 @@ export const EnergyConduits: React.FC = () => {
   const geom2 = useMemo(() => new THREE.BufferGeometry().setFromPoints(points2), [points2]);
   const geom3 = useMemo(() => new THREE.BufferGeometry().setFromPoints(points3), [points3]);
 
+  const line1 = useMemo(
+    () =>
+      new THREE.Line(
+        geom1,
+        new THREE.LineBasicMaterial({
+          color: "#10b981",
+          transparent: true,
+          opacity: 0.5,
+        })
+      ),
+    [geom1]
+  );
+  const line2 = useMemo(
+    () =>
+      new THREE.Line(
+        geom2,
+        new THREE.LineBasicMaterial({
+          color: "#8b5cf6",
+          transparent: true,
+          opacity: 0.5,
+        })
+      ),
+    [geom2]
+  );
+  const line3 = useMemo(
+    () =>
+      new THREE.Line(
+        geom3,
+        new THREE.LineBasicMaterial({
+          color: "#f59e0b",
+          transparent: true,
+          opacity: 0.5,
+        })
+      ),
+    [geom3]
+  );
+
   useFrame((_state, delta) => {
     if (!isActivityPaused) {
       simTimeRef.current += delta * environmentSpeed;
@@ -74,13 +111,13 @@ export const EnergyConduits: React.FC = () => {
   return (
     <group>
       {/* Conduit: Core -> Code City (Emerald tint) */}
-      <primitive object={new THREE.Line(geom1, new THREE.LineBasicMaterial({ color: "#10b981", transparent: true, opacity: 0.5 }))} ref={lineRef1} />
+      <primitive object={line1} ref={lineRef1} />
 
       {/* Conduit: Core -> Data Ocean (Violet tint) */}
-      <primitive object={new THREE.Line(geom2, new THREE.LineBasicMaterial({ color: "#8b5cf6", transparent: true, opacity: 0.5 }))} ref={lineRef2} />
+      <primitive object={line2} ref={lineRef2} />
 
       {/* Conduit: Core -> AI Lab (Amber tint) */}
-      <primitive object={new THREE.Line(geom3, new THREE.LineBasicMaterial({ color: "#f59e0b", transparent: true, opacity: 0.5 }))} ref={lineRef3} />
+      <primitive object={line3} ref={lineRef3} />
     </group>
   );
 };

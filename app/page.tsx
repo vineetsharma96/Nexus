@@ -12,6 +12,7 @@ import { MobileNavControls } from "@/components/ui/MobileNavControls";
 import { WarpFlash } from "@/components/ui/WarpFlash";
 import { CustomCursor } from "@/components/ui/CustomCursor";
 import { ARComputerVisionHUD } from "@/components/ui/ARComputerVisionHUD";
+import { GestureTutorialOverlay } from "@/components/ui/GestureTutorialOverlay";
 import { AccessibilityControls } from "@/components/a11y/AccessibilityControls";
 import { useWorldStore } from "@/engine/store/useWorldStore";
 import { ZONES_METADATA } from "@/procedural/worldData";
@@ -74,6 +75,9 @@ export default function NexusExperience() {
 
       {/* AR Camera Passthrough & Computer Vision Hand Pinch Tracking HUD */}
       <ARComputerVisionHUD />
+
+      {/* Interactive Hand Gesture Tutorial Overlay */}
+      <GestureTutorialOverlay />
 
       {/* Futuristic Custom Cursor Reticle (Desktop) */}
       <CustomCursor />

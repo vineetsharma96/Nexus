@@ -25,7 +25,7 @@ function findFilesWithExt(dir, extList) {
   let matched = [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name === ".next" || entry.name === ".git" || entry.name === ".agents" || entry.name === ".claude") continue;
+    if (entry.name === "node_modules" || entry.name === ".next" || entry.name === ".git" || entry.name === ".agents" || entry.name === ".claude" || entry.name === "agent") continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       matched = matched.concat(findFilesWithExt(fullPath, extList));
@@ -48,7 +48,7 @@ function scanSourceCode(dir) {
   let dangerousPatterns = [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.name === "node_modules" || entry.name === ".next" || entry.name === ".git" || entry.name === "scripts" || entry.name === ".agents" || entry.name === ".claude") continue;
+    if (entry.name === "node_modules" || entry.name === ".next" || entry.name === ".git" || entry.name === "scripts" || entry.name === ".agents" || entry.name === ".claude" || entry.name === "agent") continue;
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       dangerousPatterns = dangerousPatterns.concat(scanSourceCode(fullPath));

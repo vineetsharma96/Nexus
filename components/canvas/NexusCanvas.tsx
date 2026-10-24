@@ -54,6 +54,7 @@ function checkWebGLSupport(): boolean {
 export const NexusCanvas: React.FC = () => {
   const qualityTier = useWorldStore((state) => state.qualityTier);
   const isArMode = useWorldStore((state) => state.isArMode);
+  const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
   const [hasWebGL, setHasWebGL] = useState(true);
 
   useEffect(() => {
@@ -61,17 +62,20 @@ export const NexusCanvas: React.FC = () => {
   }, []);
 
   const dpr = useMemo(() => {
+    if (isArMode || isCvEnabled) {
+      return qualityTier === "ultra" ? ([1, 1.25] as [number, number]) : 1;
+    }
     switch (qualityTier) {
       case "ultra":
-        return [1, 2] as [number, number];
-      case "high":
         return [1, 1.5] as [number, number];
+      case "high":
+        return [1, 1.25] as [number, number];
       case "medium":
       case "low":
       default:
         return 1;
     }
-  }, [qualityTier]);
+  }, [qualityTier, isArMode, isCvEnabled]);
 
   const webglFallback = (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#030712] text-center p-6 z-10 font-mono">
@@ -103,8 +107,10 @@ export const NexusCanvas: React.FC = () => {
           dpr={dpr}
           gl={{
             alpha: true,
-            antialias: qualityTier === "ultra" || qualityTier === "high",
-            powerPreference: "default",
+            antialias:
+              qualityTier === "ultra" ||
+              (qualityTier === "high" && !isArMode && !isCvEnabled),
+            powerPreference: "high-performance",
             failIfMajorPerformanceCaveat: false,
             stencil: false,
             depth: true,

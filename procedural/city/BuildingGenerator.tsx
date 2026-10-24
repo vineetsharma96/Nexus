@@ -45,7 +45,6 @@ export const Building: React.FC<BuildingParams> = ({
 
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const setSelectedPoi = useWorldStore((state) => state.setSelectedPoi);
-  const objectScale = useWorldStore((state) => state.objectScale);
   const environmentSpeed = useWorldStore((state) => state.environmentSpeed);
   const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
   const simTimeRef = useRef(0);
@@ -56,7 +55,24 @@ export const Building: React.FC<BuildingParams> = ({
     return ProceduralTextures.getBuildingWindowsTexture();
   }, []);
 
+  const edgeGeometry = useMemo(() => {
+    const box = new THREE.BoxGeometry(width + 0.05, height + 0.05, depth + 0.05);
+    const edges = new THREE.EdgesGeometry(box);
+    box.dispose();
+    return edges;
+  }, [width, height, depth]);
+
   useFrame((_state, delta) => {
+    const storeState = useWorldStore.getState();
+    // Skip per-frame beacon updates when not in code_city and scale is settled
+    if (
+      storeState.currentZone !== "code_city" &&
+      meshRef.current &&
+      Math.abs(meshRef.current.scale.x - storeState.objectScale) < 0.01
+    ) {
+      return;
+    }
+
     if (!isActivityPaused) {
       simTimeRef.current += delta * environmentSpeed;
     }
@@ -67,7 +83,7 @@ export const Building: React.FC<BuildingParams> = ({
       (beaconRef.current.material as THREE.MeshBasicMaterial).opacity = intensity;
     }
     if (meshRef.current) {
-      const targetS = !selectedPoi || isSelected ? objectScale : 1.0;
+      const targetS = !selectedPoi || isSelected ? storeState.objectScale : 1.0;
       const nextS = THREE.MathUtils.lerp(meshRef.current.scale.x, targetS, 0.16);
       meshRef.current.scale.setScalar(nextS);
       meshRef.current.position.y = (height * nextS) / 2 + position[1];
@@ -117,7 +133,7 @@ export const Building: React.FC<BuildingParams> = ({
       onClick={handleClick}
     >
       {/* 1. Main Monolith Body */}
-      <mesh castShadow receiveShadow>
+      <mesh>
         <boxGeometry args={[width, height, depth]} />
         <meshStandardMaterial
           color="#0a0f1d"
@@ -130,8 +146,7 @@ export const Building: React.FC<BuildingParams> = ({
       </mesh>
 
       {/* 2. Glowing Architectural Edge Trim */}
-      <lineSegments>
-        <edgesGeometry args={[new THREE.BoxGeometry(width + 0.05, height + 0.05, depth + 0.05)]} />
+      <lineSegments geometry={edgeGeometry}>
         <lineBasicMaterial
           color={activeColor}
           linewidth={2}
