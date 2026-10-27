@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       success: true,
       explanation,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
       {
         success: false,

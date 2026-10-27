@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
       provider: result.provider,
       timestamp: Date.now(),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[NEXUS API /api/ai/command] Error:", err);
     return NextResponse.json(
       {
