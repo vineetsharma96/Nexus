@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useWorldStore } from "@/engine/store/useWorldStore";
-import { OceanState, QualityTier } from "@/types/world";
+import { OceanState, QualityTier, ColorScheme } from "@/types/world";
 import {
   Sliders,
   X,
@@ -170,7 +170,7 @@ export const SandboxControls: React.FC = () => {
                     type="button"
                     key={c.id}
                     onClick={() =>
-                      useWorldStore.setState({ colorScheme: c.id as any })
+                      useWorldStore.setState({ colorScheme: c.id as ColorScheme })
                     }
                     className={`px-2 py-1.5 rounded uppercase text-[9px] font-bold border transition-all cursor-pointer ${
                       colorScheme === c.id

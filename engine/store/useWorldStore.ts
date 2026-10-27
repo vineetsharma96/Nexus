@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ZoneId, QualityTier, CameraMode, OceanState, PointOfInterest } from "@/types/world";
+import { ZoneId, QualityTier, CameraMode, OceanState, PointOfInterest, ColorScheme } from "@/types/world";
 
 export type CvGestureType =
   | "idle"
@@ -28,7 +28,7 @@ export interface WorldState {
   savedEnvironmentSpeed: number;
   isActivityPaused: boolean;
   lightingIntensity: number;
-  colorScheme: "default" | "cyber" | "amber" | "monochrome";
+  colorScheme: ColorScheme;
 
   // System & Telemetry
   isBooted: boolean;
