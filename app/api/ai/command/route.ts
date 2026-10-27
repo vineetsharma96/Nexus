@@ -66,8 +66,7 @@ export async function POST(req: NextRequest) {
     let result;
     try {
       result = await provider.interpretCommand(prompt, context);
-    } catch (apiErr) {
-      console.warn("[NEXUS API /api/ai/command] Primary AI provider error, falling back to heuristics:", apiErr);
+    } catch {
       const fallback = new FallbackProvider();
       result = await fallback.interpretCommand(prompt, context);
     }
@@ -88,8 +87,7 @@ export async function POST(req: NextRequest) {
       provider: result.provider,
       timestamp: Date.now(),
     });
-  } catch (err: any) {
-    console.error("[NEXUS API /api/ai/command] Error:", err);
+  } catch {
     return NextResponse.json(
       {
         success: false,
