@@ -6,6 +6,8 @@ export type CameraMode = "free" | "orbit" | "focus" | "cinematic" | "tour";
 
 export type OceanState = "chaos" | "wave" | "lattice" | "sphere";
 
+export type ColorScheme = "default" | "cyber" | "amber" | "monochrome";
+
 export interface ZoneMetadata {
   id: ZoneId;
   name: string;
