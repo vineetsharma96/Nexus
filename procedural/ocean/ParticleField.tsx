@@ -62,6 +62,7 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
       const color1 = new THREE.Color("#8b5cf6"); // violet
       const color2 = new THREE.Color("#00f0ff"); // cyan
       const color3 = new THREE.Color("#ec4899"); // magenta
+      const tempColor = new THREE.Color();
 
       const side = Math.cbrt(count);
       const spacing = 1.2;
@@ -102,10 +103,14 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
         current[i * 3 + 2] = wave[i * 3 + 2];
 
         const t = i / count;
-        const c = t < 0.5 ? color1.clone().lerp(color2, t * 2) : color2.clone().lerp(color3, (t - 0.5) * 2);
-        col[i * 3] = c.r;
-        col[i * 3 + 1] = c.g;
-        col[i * 3 + 2] = c.b;
+        if (t < 0.5) {
+          tempColor.copy(color1).lerp(color2, t * 2);
+        } else {
+          tempColor.copy(color2).lerp(color3, (t - 0.5) * 2);
+        }
+        col[i * 3] = tempColor.r;
+        col[i * 3 + 1] = tempColor.g;
+        col[i * 3 + 2] = tempColor.b;
       }
 
       return {
