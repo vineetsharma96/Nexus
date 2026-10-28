@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useMemo } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { CoreParticles } from "./CoreParticles";
 import { CoreShader } from "@/shaders/core/CoreShaderMaterial";
@@ -118,7 +118,7 @@ export const CoreGeometry: React.FC = () => {
     }
   });
 
-  const handlePointerOver = (e: any) => {
+  const handlePointerOver = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     setHovered(true);
     ProceduralAudio.playHover();
@@ -130,7 +130,7 @@ export const CoreGeometry: React.FC = () => {
     document.body.style.cursor = "default";
   };
 
-  const handleClick = (e: any) => {
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     ProceduralAudio.playSelect();
     const corePoi = ZONES_METADATA.core.pois.find((p) => p.id === "ai_core");
