@@ -1,6 +1,14 @@
 import { SceneCommand } from "@/types/commands";
 import { useWorldStore } from "@/engine/store/useWorldStore";
 import { ZONES_METADATA } from "@/procedural/worldData";
+import { PointOfInterest, ZoneId } from "@/types/world";
+
+const POI_LOOKUP = new Map<string, { poi: PointOfInterest; zoneId: ZoneId }>();
+for (const zone of Object.values(ZONES_METADATA)) {
+  for (const poi of zone.pois) {
+    POI_LOOKUP.set(poi.id, { poi, zoneId: zone.id });
+  }
+}
 
 /**
  * SceneController safely translates validated SceneCommands into 3D world state mutations
@@ -16,18 +24,11 @@ export class SceneController {
         break;
 
       case "inspect": {
-        // Find POI across all zones
-        let targetPoi = null;
-        for (const zone of Object.values(ZONES_METADATA)) {
-          const match = zone.pois.find((p) => p.id === command.target);
-          if (match) {
-            targetPoi = match;
-            store.setZone(zone.id);
-            break;
-          }
-        }
-        if (targetPoi) {
-          store.setSelectedPoi(targetPoi);
+        // Find POI across all zones using O(1) lookup
+        const match = POI_LOOKUP.get(command.target);
+        if (match) {
+          store.setZone(match.zoneId);
+          store.setSelectedPoi(match.poi);
         }
         break;
       }
