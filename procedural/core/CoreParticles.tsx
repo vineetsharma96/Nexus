@@ -44,6 +44,7 @@ export const CoreParticles: React.FC<CoreParticlesProps> = ({
     const baseColor1 = new THREE.Color("#00f0ff");
     const baseColor2 = new THREE.Color("#3b82f6");
     const baseColor3 = new THREE.Color("#8b5cf6");
+    const tempColor = new THREE.Color();
 
     for (let i = 0; i < effectiveCount; i++) {
       // Spherical distribution with slight radial variance
@@ -59,8 +60,8 @@ export const CoreParticles: React.FC<CoreParticlesProps> = ({
       const cRand = Math.random();
       const c =
         cRand < 0.5
-          ? baseColor1.clone().lerp(baseColor2, cRand * 2)
-          : baseColor2.clone().lerp(baseColor3, (cRand - 0.5) * 2);
+          ? tempColor.copy(baseColor1).lerp(baseColor2, cRand * 2)
+          : tempColor.copy(baseColor2).lerp(baseColor3, (cRand - 0.5) * 2);
 
       col[i * 3] = c.r;
       col[i * 3 + 1] = c.g;
