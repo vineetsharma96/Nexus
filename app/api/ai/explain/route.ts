@@ -50,8 +50,7 @@ export async function POST(req: NextRequest) {
     let explanation: string;
     try {
       explanation = await provider.explainObject(objectId, zoneId);
-    } catch (apiErr) {
-      console.warn("[NEXUS API /api/ai/explain] Primary AI provider error, falling back to heuristics:", apiErr);
+    } catch {
       const fallback = new FallbackProvider();
       explanation = await fallback.explainObject(objectId, zoneId);
     }
@@ -60,7 +59,7 @@ export async function POST(req: NextRequest) {
       success: true,
       explanation,
     });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json(
       {
         success: false,
