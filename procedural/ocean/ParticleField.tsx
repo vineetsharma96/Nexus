@@ -165,38 +165,55 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
     const posArray = posAttr.array as Float32Array;
     const lerpSpeed = Math.min(1.0, delta * 3.5);
 
-    for (let i = 0; i < count; i++) {
-      const idx = i * 3;
-      let targetX = 0;
-      let targetY = 0;
-      let targetZ = 0;
-
-      if (active === "wave") {
-        targetX = wavePositions[idx];
+    if (active === "wave") {
+      for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+        const targetX = wavePositions[idx];
         const u = wavePositions[idx] * 0.12;
         const v = wavePositions[idx + 2] * 0.12;
-        targetY =
+        const targetY =
           Math.sin(u + time * 1.5) * 2.2 +
           Math.cos(v + time * 1.2) * 1.8 +
           Math.sin((u + v) * 0.5 + time) * 1.0;
-        targetZ = wavePositions[idx + 2];
-      } else if (active === "sphere") {
-        targetX = spherePositions[idx];
-        targetY = spherePositions[idx + 1];
-        targetZ = spherePositions[idx + 2];
-      } else if (active === "lattice") {
-        targetX = latticePositions[idx];
-        targetY = latticePositions[idx + 1];
-        targetZ = latticePositions[idx + 2];
-      } else {
-        targetX = chaosPositions[idx] + Math.sin(time + i) * 0.2;
-        targetY = chaosPositions[idx + 1] + Math.cos(time + i) * 0.2;
-        targetZ = chaosPositions[idx + 2];
-      }
+        const targetZ = wavePositions[idx + 2];
 
-      posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
-      posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
-      posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
+        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
+        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
+        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
+      }
+    } else if (active === "sphere") {
+      for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+        const targetX = spherePositions[idx];
+        const targetY = spherePositions[idx + 1];
+        const targetZ = spherePositions[idx + 2];
+
+        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
+        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
+        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
+      }
+    } else if (active === "lattice") {
+      for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+        const targetX = latticePositions[idx];
+        const targetY = latticePositions[idx + 1];
+        const targetZ = latticePositions[idx + 2];
+
+        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
+        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
+        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
+      }
+    } else {
+      for (let i = 0; i < count; i++) {
+        const idx = i * 3;
+        const targetX = chaosPositions[idx] + Math.sin(time + i) * 0.2;
+        const targetY = chaosPositions[idx + 1] + Math.cos(time + i) * 0.2;
+        const targetZ = chaosPositions[idx + 2];
+
+        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
+        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
+        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
+      }
     }
 
     posAttr.needsUpdate = true;
