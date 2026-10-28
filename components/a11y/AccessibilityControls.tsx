@@ -38,9 +38,9 @@ export const AccessibilityControls: React.FC = () => {
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener("change", handler as EventListener);
         return () => mediaQuery.removeEventListener("change", handler as EventListener);
-      } else if ((mediaQuery as any).addListener) {
-        (mediaQuery as any).addListener(handler);
-        return () => (mediaQuery as any).removeListener(handler);
+      } else if ("addListener" in mediaQuery) {
+        mediaQuery.addListener(handler);
+        return () => mediaQuery.removeListener(handler);
       }
     } catch {
       // Gracefully fall back if matchMedia unsupported on mobile
