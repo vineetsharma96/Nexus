@@ -44,7 +44,7 @@ function checkWebGLSupport(): boolean {
     const canvas = document.createElement("canvas");
     const gl = (canvas.getContext("webgl2") ||
       canvas.getContext("webgl") ||
-      (canvas as any).getContext("experimental-webgl")) as WebGLRenderingContext | null;
+      canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
     return !!(window.WebGLRenderingContext && gl);
   } catch {
     return false;
