@@ -30,20 +30,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: any;
+    let body: unknown;
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
     }
 
+    const payload = (typeof body === 'object' && body !== null) ? body as Record<string, unknown> : {};
+
     // Sanitize objectId and zoneId
-    const objectId = typeof body?.objectId === "string"
-      ? body.objectId.slice(0, 50).replace(/[^\w-]/g, "")
+    const objectId = typeof payload.objectId === "string"
+      ? payload.objectId.slice(0, 50).replace(/[^\w-]/g, "")
       : "unknown";
 
-    const zoneId = typeof body?.zoneId === "string"
-      ? body.zoneId.slice(0, 50).replace(/[^\w-]/g, "")
+    const zoneId = typeof payload.zoneId === "string"
+      ? payload.zoneId.slice(0, 50).replace(/[^\w-]/g, "")
       : "core";
 
     const provider = getAIProvider();
