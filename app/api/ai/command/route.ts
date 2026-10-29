@@ -4,20 +4,23 @@ import { FallbackProvider } from "@/ai/provider/FallbackProvider";
 import { SceneCommandSchema } from "@/types/commands";
 import { ZoneId } from "@/types/world";
 
-// In-memory rate limiting map: IP -> timestamp array
-const rateLimitMap = new Map<string, number[]>();
+// In-memory rate limiting map: IP -> { count, resetTime }
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
 function isRateLimited(ip: string, maxReq: number = 20, windowMs: number = 60000): boolean {
   const now = Date.now();
-  const timestamps = rateLimitMap.get(ip) || [];
-  const validTimestamps = timestamps.filter((t) => now - t < windowMs);
+  let record = rateLimitMap.get(ip);
 
-  if (validTimestamps.length >= maxReq) {
+  if (!record || now >= record.resetTime) {
+    record = { count: 0, resetTime: now + windowMs };
+    rateLimitMap.set(ip, record);
+  }
+
+  if (record.count >= maxReq) {
     return true;
   }
 
-  validTimestamps.push(now);
-  rateLimitMap.set(ip, validTimestamps);
+  record.count++;
   return false;
 }
 
