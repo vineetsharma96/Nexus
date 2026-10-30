@@ -1,0 +1,18 @@
+$ next dev -p 3000 -H 0.0.0.0
+▲ Next.js 16.2.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+✓ Ready in 529ms
+Attention: Next.js now collects completely anonymous telemetry regarding usage.
+This information is used to shape Next.js' roadmap and prioritize features.
+You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+https://nextjs.org/telemetry
+
+
+○ Compiling / ...
+ GET / 200 in 5.8s (next.js: 5.0s, application-code: 826ms)
+ GET /lite 200 in 839ms (next.js: 669ms, application-code: 171ms)
+ POST /api/ai/command 200 in 1306ms (next.js: 1263ms, application-code: 42ms)
+ POST /api/ai/explain 200 in 340ms (next.js: 327ms, application-code: 12ms)
+ POST /api/ai/command 400 in 9ms (next.js: 4ms, application-code: 6ms)
+[?25h

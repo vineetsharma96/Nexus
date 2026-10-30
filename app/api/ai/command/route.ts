@@ -34,13 +34,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: any;
+    let body: unknown;
     try {
       body = await req.json();
     } catch {
       return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
     }
-    let prompt = typeof body?.prompt === "string" ? body.prompt : "";
+
+    const payload = (typeof body === 'object' && body !== null) ? body as Record<string, unknown> : {};
+    let prompt = typeof payload.prompt === "string" ? payload.prompt : "";
 
     // Security: Sanitize & truncate user prompt
     prompt = prompt
@@ -56,10 +58,10 @@ export async function POST(req: NextRequest) {
     }
 
     const context = {
-      currentZone: (body.currentZone as ZoneId) || "core",
-      selectedPoiId: body.selectedPoiId || null,
-      qualityTier: body.qualityTier || "high",
-      oceanState: body.oceanState || "wave",
+      currentZone: (payload.currentZone as ZoneId) || "core",
+      selectedPoiId: typeof payload.selectedPoiId === "string" ? payload.selectedPoiId : null,
+      qualityTier: typeof payload.qualityTier === "string" ? payload.qualityTier : "high",
+      oceanState: typeof payload.oceanState === "string" ? payload.oceanState : "wave",
     };
 
     const provider = getAIProvider();
