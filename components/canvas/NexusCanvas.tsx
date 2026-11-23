@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useMemo, useState, useEffect, Component, ErrorInfo, ReactNode } from "react";
+import React, { Suspense, useMemo, useSyncExternalStore, Component, ErrorInfo, ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { SceneManager } from "./SceneManager";
 import { useWorldStore } from "@/engine/store/useWorldStore";
@@ -38,31 +38,34 @@ class CanvasErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
+let cachedWebGLSupport: boolean | null = null;
+
 function checkWebGLSupport(): boolean {
   if (typeof window === "undefined") return true;
+  if (cachedWebGLSupport !== null) return cachedWebGLSupport;
   try {
     const canvas = document.createElement("canvas");
-    const gl = (canvas.getContext("webgl2") ||
+    const gl =
+      canvas.getContext("webgl2") ||
       canvas.getContext("webgl") ||
-      canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
-    return !!(window.WebGLRenderingContext && gl);
+      canvas.getContext("experimental-webgl");
+    cachedWebGLSupport = !!(window.WebGLRenderingContext && gl);
+    return cachedWebGLSupport;
   } catch {
+    cachedWebGLSupport = false;
     return false;
   }
 }
 
+const subscribeNoop = () => () => {};
+
 export const NexusCanvas: React.FC = () => {
   const qualityTier = useWorldStore((state) => state.qualityTier);
-  const isArMode = useWorldStore((state) => state.isArMode);
   const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
-  const [hasWebGL, setHasWebGL] = useState(true);
-
-  useEffect(() => {
-    setHasWebGL(checkWebGLSupport());
-  }, []);
+  const hasWebGL = useSyncExternalStore(subscribeNoop, checkWebGLSupport, () => true);
 
   const dpr = useMemo(() => {
-    if (isArMode || isCvEnabled) {
+    if (isCvEnabled) {
       return qualityTier === "ultra" ? ([1, 1.25] as [number, number]) : 1;
     }
     switch (qualityTier) {
@@ -75,7 +78,7 @@ export const NexusCanvas: React.FC = () => {
       default:
         return 1;
     }
-  }, [qualityTier, isArMode, isCvEnabled]);
+  }, [qualityTier, isCvEnabled]);
 
   const webglFallback = (
     <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#030712] text-center p-6 z-10 font-mono">
@@ -106,17 +109,17 @@ export const NexusCanvas: React.FC = () => {
           camera={{ position: [0, 6, 18], fov: 45, near: 0.1, far: 250 }}
           dpr={dpr}
           gl={{
-            alpha: true,
+            alpha: false,
             antialias:
               qualityTier === "ultra" ||
-              (qualityTier === "high" && !isArMode && !isCvEnabled),
+              (qualityTier === "high" && !isCvEnabled),
             powerPreference: "high-performance",
             failIfMajorPerformanceCaveat: false,
             stencil: false,
             depth: true,
           }}
         >
-          {!isArMode && <color attach="background" args={["#030712"]} />}
+          <color attach="background" args={["#030712"]} />
           <Suspense fallback={null}>
             <SceneManager />
           </Suspense>

@@ -16,6 +16,14 @@ function isRateLimited(ip: string, maxReq: number = 20, windowMs: number = 60000
     return true;
   }
 
+  if (rateLimitMap.size > 500) {
+    for (const [key, times] of rateLimitMap.entries()) {
+      if (times.every((t) => now - t >= windowMs)) {
+        rateLimitMap.delete(key);
+      }
+    }
+  }
+
   validTimestamps.push(now);
   rateLimitMap.set(ip, validTimestamps);
   return false;
@@ -34,15 +42,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: unknown;
+    let body: Record<string, unknown>;
     try {
-      body = await req.json();
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object") {
+        return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
+      }
+      body = parsed as Record<string, unknown>;
     } catch {
       return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
     }
-
-    const payload = (typeof body === 'object' && body !== null) ? body as Record<string, unknown> : {};
-    let prompt = typeof payload.prompt === "string" ? payload.prompt : "";
+    let prompt = typeof body.prompt === "string" ? body.prompt : "";
 
     // Security: Sanitize & truncate user prompt
     prompt = prompt
@@ -58,17 +68,18 @@ export async function POST(req: NextRequest) {
     }
 
     const context = {
-      currentZone: (payload.currentZone as ZoneId) || "core",
-      selectedPoiId: typeof payload.selectedPoiId === "string" ? payload.selectedPoiId : null,
-      qualityTier: typeof payload.qualityTier === "string" ? payload.qualityTier : "high",
-      oceanState: typeof payload.oceanState === "string" ? payload.oceanState : "wave",
+      currentZone: (typeof body.currentZone === "string" ? (body.currentZone as ZoneId) : "core"),
+      selectedPoiId: typeof body.selectedPoiId === "string" ? body.selectedPoiId : null,
+      qualityTier: typeof body.qualityTier === "string" ? body.qualityTier : "high",
+      oceanState: typeof body.oceanState === "string" ? body.oceanState : "wave",
     };
 
     const provider = getAIProvider();
     let result;
     try {
       result = await provider.interpretCommand(prompt, context);
-    } catch {
+    } catch (apiErr) {
+      console.warn("[NEXUS API /api/ai/command] Primary AI provider error, falling back to heuristics:", apiErr);
       const fallback = new FallbackProvider();
       result = await fallback.interpretCommand(prompt, context);
     }
@@ -89,7 +100,8 @@ export async function POST(req: NextRequest) {
       provider: result.provider,
       timestamp: Date.now(),
     });
-  } catch {
+  } catch (err: unknown) {
+    console.error("[NEXUS API /api/ai/command] Error:", err);
     return NextResponse.json(
       {
         success: false,

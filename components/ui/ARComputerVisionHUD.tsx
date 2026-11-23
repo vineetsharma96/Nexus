@@ -6,6 +6,8 @@ import { ProceduralAudio } from "@/engine/audio/ProceduralAudio";
 import {
   createCVGestureWorker,
   CVWorkerOutboundMessage,
+  FingerStates,
+  GestureMode,
 } from "@/engine/cv/cvGestureWorker";
 import {
   Scan,
@@ -15,7 +17,6 @@ import {
   FlipHorizontal,
   Hand,
   ArrowLeftRight,
-  Eye,
   Pause,
   Play,
   ChevronLeft,
@@ -41,9 +42,18 @@ const ZONE_SHORT_NAMES: Record<string, string> = {
   ai_lab: "LAB",
 };
 
+const MEDIAPIPE_VERSION = "1.2.3";
+
+const EMPTY_FINGERS: FingerStates = {
+  thumb: false,
+  index: false,
+  middle: false,
+  ring: false,
+  pinky: false,
+};
+
 export const ARComputerVisionHUD: React.FC = () => {
   const isBooted = useWorldStore((state) => state.isBooted);
-  const isArMode = useWorldStore((state) => state.isArMode);
   const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
   const isGestureTutorialOpen = useWorldStore((state) => state.isGestureTutorialOpen);
   const objectScale = useWorldStore((state) => state.objectScale);
@@ -52,11 +62,10 @@ export const ARComputerVisionHUD: React.FC = () => {
   const cvGesture = useWorldStore((state) => state.cvGesture);
   const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
   const invertPinch = useWorldStore((state) => state.invertPinch);
-  const arFacingMode = useWorldStore((state) => state.arFacingMode);
+  const cameraFacingMode = useWorldStore((state) => state.cameraFacingMode);
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const currentZone = useWorldStore((state) => state.currentZone);
 
-  const toggleArMode = useWorldStore((state) => state.toggleArMode);
   const toggleCvEnabled = useWorldStore((state) => state.toggleCvEnabled);
   const toggleGestureTutorial = useWorldStore((state) => state.toggleGestureTutorial);
   const setPinchTelemetry = useWorldStore((state) => state.setPinchTelemetry);
@@ -64,21 +73,33 @@ export const ARComputerVisionHUD: React.FC = () => {
   const cycleZone = useWorldStore((state) => state.cycleZone);
   const setZone = useWorldStore((state) => state.setZone);
   const toggleInvertPinch = useWorldStore((state) => state.toggleInvertPinch);
-  const setArFacingMode = useWorldStore((state) => state.setArFacingMode);
-  const toggleArFacingMode = useWorldStore((state) => state.toggleArFacingMode);
+  const setCameraFacingMode = useWorldStore((state) => state.setCameraFacingMode);
+  const toggleCameraFacingMode = useWorldStore((state) => state.toggleCameraFacingMode);
 
-  const arVideoRef = useRef<HTMLVideoElement>(null);
   const hudVideoRef = useRef<HTMLVideoElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const cvDownscaleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const landmarkerRef = useRef<any>(null);
+  const landmarkerRef = useRef<{
+    detectForVideo: (
+      input: HTMLVideoElement | HTMLCanvasElement,
+      timestamp: number
+    ) => {
+      landmarks?: { x: number; y: number; z: number }[][];
+      worldLandmarks?: { x: number; y: number; z: number }[][];
+    };
+    close?: () => void;
+  } | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const workerOffscreenSupportedRef = useRef<boolean>(false);
   const workerBusyRef = useRef<boolean>(false);
+  const fallbackInitPromiseRef = useRef<Promise<typeof landmarkerRef.current> | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const smoothedScaleRef = useRef<number>(1.0);
   const lastHandsCountRef = useRef<number>(0);
+  const lastMainTimestampRef = useRef<number>(0);
+  const simPinchRatioRef = useRef<number>(0.45);
+  const videoAspectRef = useRef<number>(16 / 9);
 
   const [cameraStatus, setCameraStatus] = useState<
     "idle" | "initializing" | "active" | "simulated"
@@ -87,24 +108,32 @@ export const ARComputerVisionHUD: React.FC = () => {
   const [simPinchRatio, setSimPinchRatio] = useState<number>(0.45);
   const [detectedHandsCount, setDetectedHandsCount] = useState<number>(0);
   const [lastGestureLabel, setLastGestureLabel] = useState<string>("READY");
+  const [activeMode, setActiveMode] = useState<GestureMode>("neutral");
+  const [fingerStates, setFingerStates] = useState<FingerStates>(EMPTY_FINGERS);
   const [isWorkerActive, setIsWorkerActive] = useState<boolean>(false);
 
-  // Compute target 3D object scale from normalized pinch ratio (0.0 = closed pinch, 1.0 = wide spread)
+  const syncWorkerScale = useCallback((scale: number) => {
+    smoothedScaleRef.current = scale;
+    if (workerRef.current) {
+      workerRef.current.postMessage({ type: "RESET_SCALE", scale });
+    }
+  }, []);
+
+  // Compute target 3D object scale from normalized pinch ratio (0.0 = pinch in, 1.0 = pinch out)
   const applyPinchRatioToScale = useCallback(
     (normalizedRatio: number) => {
       const clampedRatio = Math.max(0, Math.min(1, normalizedRatio));
       const invert = useWorldStore.getState().invertPinch;
       const effectiveRatio = invert ? 1 - clampedRatio : clampedRatio;
 
-      // Map [0..1] -> [0.25..3.0]
-      const targetScale = 0.25 + effectiveRatio * 2.75;
+      const targetScale = 0.3 + effectiveRatio * 2.5;
       smoothedScaleRef.current =
-        smoothedScaleRef.current * 0.68 + targetScale * 0.32;
+        smoothedScaleRef.current * 0.6 + targetScale * 0.4;
 
       const gestureState: "idle" | "pinching_small" | "pinching_big" =
         effectiveRatio < 0.32
           ? "pinching_small"
-          : effectiveRatio > 0.55
+          : effectiveRatio > 0.62
           ? "pinching_big"
           : "idle";
 
@@ -113,15 +142,21 @@ export const ARComputerVisionHUD: React.FC = () => {
         gestureState,
         Number(smoothedScaleRef.current.toFixed(2))
       );
+      if (workerRef.current) {
+        workerRef.current.postMessage({
+          type: "RESET_SCALE",
+          scale: smoothedScaleRef.current,
+        });
+      }
     },
     [setPinchTelemetry]
   );
 
-  // Trigger Clenched Fist -> Pause Activity
+  // Trigger Closed Hand -> Pause Activity
   const triggerFistPause = useCallback(() => {
     const wasPaused = useWorldStore.getState().isActivityPaused;
     setActivityPaused(true);
-    setLastGestureLabel("CLENCHED FIST · PAUSED");
+    setLastGestureLabel("CLOSED HAND · PAUSED");
     if (!wasPaused) {
       ProceduralAudio.playHover();
     }
@@ -137,7 +172,7 @@ export const ARComputerVisionHUD: React.FC = () => {
     }
   }, [setActivityPaused]);
 
-  // Trigger 4-Finger Horizontal Swipe -> Next / Prev Zone (core, city, ocean, lab)
+  // Trigger Slide Right / Left -> Next / Prev Zone (core, city, ocean, lab)
   const triggerFourFingerSwipe = useCallback(
     (direction: "next" | "prev") => {
       cycleZone(direction);
@@ -145,45 +180,24 @@ export const ARComputerVisionHUD: React.FC = () => {
       const zoneName = ZONE_SHORT_NAMES[nextZone] || nextZone.toUpperCase();
       const label =
         direction === "next"
-          ? `4-FINGER RIGHT → ${zoneName}`
-          : `4-FINGER LEFT ← ${zoneName}`;
+          ? `SLIDE RIGHT → ${zoneName}`
+          : `SLIDE LEFT ← ${zoneName}`;
       setLastGestureLabel(label);
       ProceduralAudio.playSelect();
     },
     [cycleZone]
   );
 
-  // Initialize MediaPipe HandLandmarker (numHands: 1 for 2x faster inference in AR/CV)
+  // Main-thread MediaPipe HandLandmarker fallback (version-matched to installed v1.2.3)
   const initHandLandmarker = useCallback(async () => {
     if (landmarkerRef.current) return landmarkerRef.current;
-    try {
-      const vision = await import("@mediapipe/tasks-vision");
-      const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
-      );
-      const handLandmarker = await vision.HandLandmarker.createFromOptions(
-        filesetResolver,
-        {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
-            delegate: "GPU",
-          },
-          runningMode: "VIDEO",
-          numHands: 1,
-          minHandDetectionConfidence: 0.45,
-          minHandPresenceConfidence: 0.45,
-          minTrackingConfidence: 0.45,
-        }
-      );
-      landmarkerRef.current = handLandmarker;
-      return handLandmarker;
-    } catch (err) {
-      console.warn("[NEXUS CV] MediaPipe GPU init fallback to CPU:", err);
+    if (fallbackInitPromiseRef.current) return fallbackInitPromiseRef.current;
+
+    fallbackInitPromiseRef.current = (async () => {
       try {
         const vision = await import("@mediapipe/tasks-vision");
         const filesetResolver = await vision.FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.18/wasm"
+          `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`
         );
         const handLandmarker = await vision.HandLandmarker.createFromOptions(
           filesetResolver,
@@ -191,24 +205,56 @@ export const ARComputerVisionHUD: React.FC = () => {
             baseOptions: {
               modelAssetPath:
                 "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+              delegate: "GPU",
             },
             runningMode: "VIDEO",
             numHands: 1,
+            minHandDetectionConfidence: 0.45,
+            minHandPresenceConfidence: 0.45,
+            minTrackingConfidence: 0.45,
           }
         );
         landmarkerRef.current = handLandmarker;
         return handLandmarker;
-      } catch (cpuErr) {
-        console.warn(
-          "[NEXUS CV] HandLandmarker unavailable, using interactive CV simulator:",
-          cpuErr
-        );
-        return null;
+      } catch (err) {
+        console.warn("[NEXUS CV] MediaPipe GPU init fallback to CPU:", err);
+        try {
+          const vision = await import("@mediapipe/tasks-vision");
+          const filesetResolver = await vision.FilesetResolver.forVisionTasks(
+            `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MEDIAPIPE_VERSION}/wasm`
+          );
+          const handLandmarker = await vision.HandLandmarker.createFromOptions(
+            filesetResolver,
+            {
+              baseOptions: {
+                modelAssetPath:
+                  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+              },
+              runningMode: "VIDEO",
+              numHands: 1,
+              minHandDetectionConfidence: 0.45,
+              minHandPresenceConfidence: 0.45,
+              minTrackingConfidence: 0.45,
+            }
+          );
+          landmarkerRef.current = handLandmarker;
+          return handLandmarker;
+        } catch (cpuErr) {
+          console.warn(
+            "[NEXUS CV] HandLandmarker unavailable, using interactive CV simulator:",
+            cpuErr
+          );
+          return null;
+        }
+      } finally {
+        fallbackInitPromiseRef.current = null;
       }
-    }
+    })();
+
+    return fallbackInitPromiseRef.current;
   }, []);
 
-  // Draw hand landmarks and active gesture overlays onto the HUD canvas
+  // Draw 21-landmark skeleton and mode-specific visual telemetry onto HUD canvas
   const drawHudOverlay = useCallback(
     (
       ctx: CanvasRenderingContext2D,
@@ -216,25 +262,52 @@ export const ARComputerVisionHUD: React.FC = () => {
       height: number,
       landmarksList: { x: number; y: number; z: number }[][],
       activeRatio: number | null,
-      detectedMode: "pinch" | "fist" | "palm" | "four_finger"
+      detectedMode: GestureMode
     ) => {
       ctx.clearRect(0, 0, width, height);
 
       if (landmarksList.length === 0) {
-        ctx.strokeStyle = "rgba(0, 240, 255, 0.25)";
+        ctx.strokeStyle = "rgba(0, 240, 255, 0.22)";
         ctx.lineWidth = 1;
-        ctx.strokeRect(16, 16, width - 32, height - 32);
+        ctx.strokeRect(14, 14, width - 28, height - 28);
         return;
       }
 
+      const isPinchMode =
+        detectedMode === "pinch" ||
+        detectedMode === "pinch_in" ||
+        detectedMode === "pinch_out";
+      const isSwipeMode =
+        detectedMode === "swipe_left" || detectedMode === "swipe_right";
+
       const boneColor =
         detectedMode === "fist"
-          ? "rgba(245, 158, 11, 0.75)"
+          ? "rgba(245, 158, 11, 0.85)"
           : detectedMode === "palm"
-          ? "rgba(16, 185, 129, 0.75)"
-          : detectedMode === "four_finger"
-          ? "rgba(168, 85, 247, 0.8)"
-          : "rgba(0, 240, 255, 0.55)";
+          ? "rgba(16, 185, 129, 0.85)"
+          : isSwipeMode
+          ? "rgba(168, 85, 247, 0.9)"
+          : detectedMode === "pinch_in"
+          ? "rgba(236, 72, 153, 0.85)"
+          : detectedMode === "pinch_out"
+          ? "rgba(16, 185, 129, 0.85)"
+          : "rgba(0, 240, 255, 0.65)";
+
+      const canvasAspect = width / Math.max(1, height);
+      const vidAspect = videoAspectRef.current > 0.2 ? videoAspectRef.current : canvasAspect;
+      let drawW = width;
+      let drawH = height;
+      let offsetX = 0;
+      let offsetY = 0;
+      if (vidAspect > canvasAspect) {
+        drawH = width / vidAspect;
+        offsetY = (height - drawH) / 2;
+      } else if (vidAspect < canvasAspect) {
+        drawW = height * vidAspect;
+        offsetX = (width - drawW) / 2;
+      }
+      const mapX = (nx: number) => offsetX + nx * drawW;
+      const mapY = (ny: number) => offsetY + ny * drawH;
 
       for (const landmarks of landmarksList) {
         ctx.strokeStyle = boneColor;
@@ -244,22 +317,20 @@ export const ARComputerVisionHUD: React.FC = () => {
           const p2 = landmarks[endIdx];
           if (!p1 || !p2) continue;
           ctx.beginPath();
-          ctx.moveTo(p1.x * width, p1.y * height);
-          ctx.lineTo(p2.x * width, p2.y * height);
+          ctx.moveTo(mapX(p1.x), mapY(p1.y));
+          ctx.lineTo(mapX(p2.x), mapY(p2.y));
           ctx.stroke();
         }
 
         for (let i = 0; i < landmarks.length; i++) {
           const pt = landmarks[i];
           const isPinchTip = i === 4 || i === 8;
-          const isFourFingerTip = i === 8 || i === 12 || i === 16 || i === 20;
+          const isFingerTip = i === 4 || i === 8 || i === 12 || i === 16 || i === 20;
           ctx.beginPath();
           ctx.arc(
-            pt.x * width,
-            pt.y * height,
-            isPinchTip || (detectedMode === "four_finger" && isFourFingerTip)
-              ? 5
-              : 2.5,
+            mapX(pt.x),
+            mapY(pt.y),
+            (isPinchMode && isPinchTip) || (isSwipeMode && isFingerTip) ? 4.5 : 2.5,
             0,
             Math.PI * 2
           );
@@ -268,36 +339,40 @@ export const ARComputerVisionHUD: React.FC = () => {
               ? "#f59e0b"
               : detectedMode === "palm"
               ? "#10b981"
-              : detectedMode === "four_finger" && isFourFingerTip
+              : isSwipeMode
               ? "#a855f7"
+              : detectedMode === "pinch_in" && isPinchTip
+              ? "#ec4899"
+              : detectedMode === "pinch_out" && isPinchTip
+              ? "#10b981"
               : isPinchTip
               ? "#f59e0b"
               : "#00f0ff";
           ctx.fill();
         }
 
-        if (detectedMode === "four_finger") {
+        if (isSwipeMode) {
           const tips = [landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
           if (tips.every(Boolean)) {
             ctx.beginPath();
             ctx.strokeStyle = "#a855f7";
             ctx.lineWidth = 2.5;
-            ctx.moveTo(tips[0].x * width, tips[0].y * height);
+            ctx.moveTo(mapX(tips[0].x), mapY(tips[0].y));
             for (let k = 1; k < tips.length; k++) {
-              ctx.lineTo(tips[k].x * width, tips[k].y * height);
+              ctx.lineTo(mapX(tips[k].x), mapY(tips[k].y));
             }
             ctx.stroke();
           }
         }
 
-        if (detectedMode === "pinch") {
+        if (isPinchMode) {
           const thumbTip = landmarks[4];
           const indexTip = landmarks[8];
           if (thumbTip && indexTip) {
-            const tx = thumbTip.x * width;
-            const ty = thumbTip.y * height;
-            const ix = indexTip.x * width;
-            const iy = indexTip.y * height;
+            const tx = mapX(thumbTip.x);
+            const ty = mapY(thumbTip.y);
+            const ix = mapX(indexTip.x);
+            const iy = mapY(indexTip.y);
             const midX = (tx + ix) / 2;
             const midY = (ty + iy) / 2;
 
@@ -306,16 +381,18 @@ export const ARComputerVisionHUD: React.FC = () => {
             ctx.moveTo(tx, ty);
             ctx.lineTo(ix, iy);
             ctx.strokeStyle =
-              activeRatio !== null && activeRatio < 0.32
+              detectedMode === "pinch_in"
                 ? "#ec4899"
-                : activeRatio !== null && activeRatio > 0.55
+                : detectedMode === "pinch_out"
                 ? "#10b981"
-                : "#f59e0b";
+                : activeRatio !== null && activeRatio < 0.35
+                ? "#ec4899"
+                : "#00f0ff";
             ctx.lineWidth = 2.5;
             ctx.stroke();
             ctx.setLineDash([]);
 
-            ctx.fillStyle = "rgba(3, 7, 18, 0.85)";
+            ctx.fillStyle = "rgba(3, 7, 18, 0.88)";
             ctx.fillRect(midX - 28, midY - 10, 56, 20);
             ctx.strokeStyle = "#00f0ff";
             ctx.lineWidth = 1;
@@ -336,7 +413,7 @@ export const ARComputerVisionHUD: React.FC = () => {
     []
   );
 
-  // Start / Stop Camera & Web Worker Off-Thread CV Pipeline
+  // Start / Stop Camera & Web Worker Off-Thread Computer Vision Pipeline
   useEffect(() => {
     let isCancelled = false;
 
@@ -357,9 +434,11 @@ export const ARComputerVisionHUD: React.FC = () => {
         streamRef.current = null;
       }
 
-      if (!isCvEnabled && !isArMode) {
+      if (!isCvEnabled) {
         setCameraStatus("idle");
         setDetectedHandsCount(0);
+        setActiveMode("neutral");
+        setFingerStates(EMPTY_FINGERS);
         lastHandsCountRef.current = 0;
         return;
       }
@@ -367,11 +446,11 @@ export const ARComputerVisionHUD: React.FC = () => {
       setCameraStatus("initializing");
       setCameraError(null);
 
-      // Prepare lightweight 224x126 offscreen canvas for fallback landmark extraction
+      // Prepare downscale canvas for main-thread fallback
       if (!cvDownscaleCanvasRef.current && typeof document !== "undefined") {
         const offCanvas = document.createElement("canvas");
-        offCanvas.width = 224;
-        offCanvas.height = 126;
+        offCanvas.width = 256;
+        offCanvas.height = 144;
         cvDownscaleCanvasRef.current = offCanvas;
       }
 
@@ -387,7 +466,6 @@ export const ARComputerVisionHUD: React.FC = () => {
             (window.innerWidth < 768 ||
               (navigator.maxTouchPoints && navigator.maxTouchPoints > 1));
 
-          // Mobile uses 480x270 @ 24-30fps to minimize hardware video decode & AR texture bandwidth
           const videoConstraints = isMobileViewport
             ? {
                 width: { ideal: 480 },
@@ -404,7 +482,7 @@ export const ARComputerVisionHUD: React.FC = () => {
             mediaStream = await navigator.mediaDevices.getUserMedia({
               video: {
                 ...videoConstraints,
-                facingMode: { exact: arFacingMode },
+                facingMode: { exact: cameraFacingMode },
               },
               audio: false,
             });
@@ -412,7 +490,7 @@ export const ARComputerVisionHUD: React.FC = () => {
             mediaStream = await navigator.mediaDevices.getUserMedia({
               video: {
                 ...videoConstraints,
-                facingMode: arFacingMode,
+                facingMode: cameraFacingMode,
               },
               audio: false,
             });
@@ -426,7 +504,7 @@ export const ARComputerVisionHUD: React.FC = () => {
         setCameraError(
           "Live camera unavailable or permission declined — Interactive CV Gesture Simulator active."
         );
-        applyPinchRatioToScale(simPinchRatio);
+        applyPinchRatioToScale(simPinchRatioRef.current);
         return;
       }
 
@@ -437,23 +515,14 @@ export const ARComputerVisionHUD: React.FC = () => {
 
       streamRef.current = mediaStream;
 
-      if (isArMode && arVideoRef.current) {
-        arVideoRef.current.srcObject = mediaStream;
-        arVideoRef.current.play().catch(() => {});
-      }
-      if (isCvEnabled && hudVideoRef.current) {
+      if (hudVideoRef.current) {
         hudVideoRef.current.srcObject = mediaStream;
         hudVideoRef.current.play().catch(() => {});
       }
 
       setCameraStatus("active");
 
-      // Only spawn Web Worker and run CV pipeline when Computer Vision is enabled
-      if (!isCvEnabled) {
-        return;
-      }
-
-      // Spawn dedicated CV Gesture Web Worker
+      // Spawn dedicated Computer Vision Web Worker
       const worker = createCVGestureWorker();
       let workerStatusResolved = false;
 
@@ -467,7 +536,7 @@ export const ARComputerVisionHUD: React.FC = () => {
               workerStatusResolved = true;
               resolve(false);
             }
-          }, 3500);
+          }, 4000);
 
           worker.onmessage = (evt: MessageEvent<CVWorkerOutboundMessage>) => {
             const msg = evt.data;
@@ -483,6 +552,14 @@ export const ARComputerVisionHUD: React.FC = () => {
               return;
             }
 
+            if (msg.type === "CV_WORKER_FALLBACK") {
+              // Seamless automatic fallback if OffscreenCanvas WebGL fails at runtime
+              workerOffscreenSupportedRef.current = false;
+              workerBusyRef.current = false;
+              initHandLandmarker();
+              return;
+            }
+
             if (msg.type === "CV_WORKER_RESULT") {
               workerBusyRef.current = false;
 
@@ -490,6 +567,9 @@ export const ARComputerVisionHUD: React.FC = () => {
                 lastHandsCountRef.current = msg.handsCount;
                 setDetectedHandsCount(msg.handsCount);
               }
+
+              setActiveMode(msg.mode);
+              setFingerStates(msg.fingerStates);
 
               if (msg.triggeredAction === "fist_pause") {
                 triggerFistPause();
@@ -499,19 +579,29 @@ export const ARComputerVisionHUD: React.FC = () => {
                 triggerFourFingerSwipe("next");
               } else if (msg.triggeredAction === "swipe_prev") {
                 triggerFourFingerSwipe("prev");
-              } else if (msg.handsCount > 0 && msg.mode === "pinch" && msg.computedRatio !== null) {
-                smoothedScaleRef.current = msg.smoothedScale;
-                useWorldStore
-                  .getState()
-                  .setPinchTelemetry(
-                    msg.computedRatio,
-                    msg.pinchState,
-                    msg.smoothedScale
-                  );
-              } else if (msg.handsCount === 0) {
-                useWorldStore
-                  .getState()
-                  .setPinchTelemetry(null, "idle", undefined);
+              } else {
+                setLastGestureLabel(msg.liveLabel);
+
+                if (
+                  msg.handsCount > 0 &&
+                  (msg.mode === "pinch" ||
+                    msg.mode === "pinch_in" ||
+                    msg.mode === "pinch_out") &&
+                  msg.computedRatio !== null
+                ) {
+                  smoothedScaleRef.current = msg.smoothedScale;
+                  useWorldStore
+                    .getState()
+                    .setPinchTelemetry(
+                      msg.computedRatio,
+                      msg.pinchState,
+                      msg.smoothedScale
+                    );
+                } else if (msg.handsCount === 0) {
+                  useWorldStore
+                    .getState()
+                    .setPinchTelemetry(null, "idle", undefined);
+                }
               }
 
               const canvasEl = overlayCanvasRef.current;
@@ -531,8 +621,8 @@ export const ARComputerVisionHUD: React.FC = () => {
 
               if (!isCancelled) {
                 const nextDelay = Math.max(
-                  85,
-                  Math.min(180, Math.round((msg.inferMs || 25) * 2.5))
+                  65,
+                  Math.min(150, Math.round((msg.inferMs || 22) * 2.2))
                 );
                 timerRef.current = setTimeout(runCvInferenceTick, nextDelay);
               }
@@ -540,11 +630,13 @@ export const ARComputerVisionHUD: React.FC = () => {
           };
         });
 
+        worker.postMessage({
+          type: "RESET_SCALE",
+          scale: useWorldStore.getState().objectScale,
+        });
         worker.postMessage({ type: "INIT_WORKER" });
         const workerOffscreenOk = await workerReadyPromise;
 
-        // If browser doesn't support OffscreenCanvas WebGL inside Worker, init main-thread detector
-        // while still offloading all 21-landmark gesture classification to the Worker
         if (!workerOffscreenOk && !isCancelled) {
           await initHandLandmarker();
         }
@@ -554,28 +646,46 @@ export const ARComputerVisionHUD: React.FC = () => {
 
       let lastVideoTime = -1;
 
-      // Non-blocking CV tick that dispatches frame to Web Worker with backpressure control
       const runCvInferenceTick = async () => {
         if (isCancelled) return;
 
         if (workerBusyRef.current) {
-          timerRef.current = setTimeout(runCvInferenceTick, 60);
+          timerRef.current = setTimeout(runCvInferenceTick, 55);
           return;
         }
 
-        const videoEl = hudVideoRef.current || arVideoRef.current;
+        const videoEl = hudVideoRef.current;
         const activeWorker = workerRef.current;
 
         if (
           videoEl &&
           videoEl.readyState >= 2 &&
+          videoEl.videoWidth > 0 &&
+          videoEl.videoHeight > 0 &&
           videoEl.currentTime !== lastVideoTime
         ) {
           lastVideoTime = videoEl.currentTime;
-          const now = performance.now();
+          const now = Math.round(performance.now());
+          const ts =
+            now > lastMainTimestampRef.current
+              ? now
+              : lastMainTimestampRef.current + 1;
+          lastMainTimestampRef.current = ts;
+
           const state = useWorldStore.getState();
 
-          // Path A: Full off-thread MediaPipe + Gesture Detection in Web Worker via zero-copy ImageBitmap
+          // Preserve true camera aspect ratio (critical for portrait mobile vs landscape desktop!)
+          const vw = videoEl.videoWidth;
+          const vh = videoEl.videoHeight;
+          const aspectRatio = vw / Math.max(1, vh);
+          videoAspectRef.current = aspectRatio;
+          const maxDim = 256;
+          const targetW =
+            vw >= vh ? maxDim : Math.max(96, Math.round(maxDim * aspectRatio));
+          const targetH =
+            vh > vw ? maxDim : Math.max(96, Math.round(maxDim / aspectRatio));
+
+          // Path A: Full off-thread MediaPipe + 3D Gesture Engine in Web Worker
           if (
             activeWorker &&
             workerOffscreenSupportedRef.current &&
@@ -584,8 +694,8 @@ export const ARComputerVisionHUD: React.FC = () => {
             try {
               workerBusyRef.current = true;
               const bitmap = await createImageBitmap(videoEl, {
-                resizeWidth: 224,
-                resizeHeight: 126,
+                resizeWidth: targetW,
+                resizeHeight: targetH,
               });
               if (isCancelled) {
                 bitmap.close();
@@ -595,8 +705,10 @@ export const ARComputerVisionHUD: React.FC = () => {
                 {
                   type: "PROCESS_BITMAP",
                   bitmap,
-                  timestamp: now,
-                  facingMode: state.arFacingMode,
+                  width: targetW,
+                  height: targetH,
+                  timestamp: ts,
+                  facingMode: state.cameraFacingMode,
                   invertPinch: state.invertPinch,
                 },
                 [bitmap]
@@ -607,29 +719,39 @@ export const ARComputerVisionHUD: React.FC = () => {
             }
           }
 
-          // Path B: Fallback landmark extraction + Web Worker gesture classification
+          // Path B: Aspect-preserved main-thread MediaPipe + Web Worker 3D Gesture Classifier
           const landmarker = landmarkerRef.current;
           const offscreenEl = cvDownscaleCanvasRef.current;
           if (landmarker && activeWorker) {
             try {
               let inputSource: HTMLVideoElement | HTMLCanvasElement = videoEl;
               if (offscreenEl) {
+                if (
+                  offscreenEl.width !== targetW ||
+                  offscreenEl.height !== targetH
+                ) {
+                  offscreenEl.width = targetW;
+                  offscreenEl.height = targetH;
+                }
                 const offCtx = offscreenEl.getContext("2d", {
                   willReadFrequently: true,
                 });
                 if (offCtx) {
-                  offCtx.drawImage(videoEl, 0, 0, 224, 126);
+                  offCtx.drawImage(videoEl, 0, 0, targetW, targetH);
                   inputSource = offscreenEl;
                 }
               }
-              const results = landmarker.detectForVideo(inputSource, now);
+              const results = landmarker.detectForVideo(inputSource, ts);
               const hands = results?.landmarks || [];
+              const worldHands = results?.worldLandmarks || [];
               workerBusyRef.current = true;
               activeWorker.postMessage({
                 type: "CLASSIFY_LANDMARKS",
                 hands,
-                timestamp: now,
-                facingMode: state.arFacingMode,
+                worldHands,
+                aspectRatio,
+                timestamp: ts,
+                facingMode: state.cameraFacingMode,
                 invertPinch: state.invertPinch,
               });
               return;
@@ -640,11 +762,11 @@ export const ARComputerVisionHUD: React.FC = () => {
         }
 
         if (!isCancelled) {
-          timerRef.current = setTimeout(runCvInferenceTick, 90);
+          timerRef.current = setTimeout(runCvInferenceTick, 75);
         }
       };
 
-      timerRef.current = setTimeout(runCvInferenceTick, 85);
+      timerRef.current = setTimeout(runCvInferenceTick, 75);
     }
 
     startCameraAndVision();
@@ -667,16 +789,22 @@ export const ARComputerVisionHUD: React.FC = () => {
     };
   }, [
     isCvEnabled,
-    isArMode,
-    arFacingMode,
+    cameraFacingMode,
     initHandLandmarker,
     applyPinchRatioToScale,
     drawHudOverlay,
-    simPinchRatio,
     triggerFistPause,
     triggerPalmResume,
     triggerFourFingerSwipe,
   ]);
+
+  // Dispose main-thread MediaPipe HandLandmarker resources on unmount
+  useEffect(() => {
+    return () => {
+      landmarkerRef.current?.close?.();
+      landmarkerRef.current = null;
+    };
+  }, []);
 
   // Multi-touch 2-finger pinch & keyboard shortcuts
   useEffect(() => {
@@ -701,8 +829,8 @@ export const ARComputerVisionHUD: React.FC = () => {
         const invert = useWorldStore.getState().invertPinch;
         const effectiveMultiplier = invert ? 1 / ratio : ratio;
         const nextScale = Math.max(
-          0.25,
-          Math.min(3.0, initialScaleOnTouch * effectiveMultiplier)
+          0.3,
+          Math.min(2.8, initialScaleOnTouch * effectiveMultiplier)
         );
         const state =
           effectiveMultiplier < 0.95
@@ -729,14 +857,17 @@ export const ARComputerVisionHUD: React.FC = () => {
       if (activeTag === "input" || activeTag === "textarea") return;
 
       if (e.key === "+" || e.key === "=") {
-        const next = Math.min(3.0, useWorldStore.getState().objectScale + 0.2);
+        const next = Math.min(2.8, useWorldStore.getState().objectScale + 0.2);
+        syncWorkerScale(next);
         useWorldStore.getState().setPinchTelemetry(0.85, "pinching_big", next);
         ProceduralAudio.playHover();
       } else if (e.key === "-" || e.key === "_") {
-        const next = Math.max(0.25, useWorldStore.getState().objectScale - 0.2);
+        const next = Math.max(0.3, useWorldStore.getState().objectScale - 0.2);
+        syncWorkerScale(next);
         useWorldStore.getState().setPinchTelemetry(0.15, "pinching_small", next);
         ProceduralAudio.playHover();
       } else if (e.key === "0") {
+        syncWorkerScale(1.0);
         useWorldStore.getState().setPinchTelemetry(0.45, "idle", 1.0);
         ProceduralAudio.playSelect();
       }
@@ -753,7 +884,7 @@ export const ARComputerVisionHUD: React.FC = () => {
       window.removeEventListener("touchend", handleTouchEnd);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [syncWorkerScale]);
 
   if (!isBooted) return null;
 
@@ -767,91 +898,19 @@ export const ARComputerVisionHUD: React.FC = () => {
     ? "DATA OCEAN MANIFOLD"
     : "AI LAB MODULES";
 
+  const fingerChips: { key: keyof FingerStates; label: string }[] = [
+    { key: "thumb", label: "T" },
+    { key: "index", label: "I" },
+    { key: "middle", label: "M" },
+    { key: "ring", label: "R" },
+    { key: "pinky", label: "P" },
+  ];
+
   return (
     <>
-      {/* 1. Full-Screen Augmented Reality (AR) Camera Passthrough Layer */}
-      {isArMode && (
-        <div className="fixed inset-0 pointer-events-none z-0">
-          <video
-            ref={arVideoRef}
-            playsInline
-            muted
-            autoPlay
-            className={`w-full h-full object-cover ${
-              arFacingMode === "user" ? "scale-x-[-1]" : ""
-            }`}
-          />
-
-          {cameraStatus === "simulated" && (
-            <div
-              className="absolute inset-0"
-              style={{
-                background:
-                  "radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.18) 0%, rgba(3, 7, 18, 0.85) 80%)",
-              }}
-            />
-          )}
-
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-64 h-64 sm:w-88 sm:h-88 rounded-full border border-cyan-400/25 flex items-center justify-center relative">
-              <div className="w-4 h-4 border-t-2 border-l-2 border-cyan-400 absolute top-5 left-5" />
-              <div className="w-4 h-4 border-t-2 border-r-2 border-cyan-400 absolute top-5 right-5" />
-              <div className="w-4 h-4 border-b-2 border-l-2 border-cyan-400 absolute bottom-5 left-5" />
-              <div className="w-4 h-4 border-b-2 border-r-2 border-cyan-400 absolute bottom-5 right-5" />
-              <div className="absolute -top-7 text-[10px] font-mono text-cyan-300 tracking-widest bg-slate-950/80 px-2.5 py-0.5 rounded border border-cyan-400/40 whitespace-nowrap">
-                AR ANCHOR · {arFacingMode === "user" ? "FRONT CAM" : "REAR CAM"} · {objectScale.toFixed(2)}x
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 2. Non-Overlapping AR & Computer Vision Control Strip (Left-bounded before Sandbox button) */}
+      {/* 1. Non-Overlapping Computer Vision Control Strip (AR view removed) */}
       <div className="fixed top-[94px] sm:top-[110px] lg:top-[76px] left-2.5 sm:left-4 md:left-6 right-[96px] sm:right-[132px] z-30 flex items-center gap-1 sm:gap-1.5 font-mono pointer-events-auto overflow-x-auto no-scrollbar">
-        {/* Toggle AR Mode */}
-        <button
-          type="button"
-          onClick={() => {
-            ProceduralAudio.playSelect();
-            toggleArMode();
-          }}
-          className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs border transition-all flex items-center space-x-1 shadow-lg cursor-pointer whitespace-nowrap shrink-0 ${
-            isArMode
-              ? "bg-emerald-500/30 text-emerald-200 border-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.45)] font-bold"
-              : "glass-panel text-slate-300 hover:text-white hover:border-emerald-400/50 border-white/10"
-          }`}
-          title="Toggle Augmented Reality Camera Passthrough"
-        >
-          <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400 shrink-0" />
-          <span className="sm:hidden">{isArMode ? "AR:ON" : "AR"}</span>
-          <span className="hidden sm:inline">{isArMode ? "AR MODE: ON" : "AR MODE"}</span>
-        </button>
-
-        {/* Dedicated Front / Rear Camera Switcher in AR Bar */}
-        <button
-          type="button"
-          onClick={() => {
-            ProceduralAudio.playSelect();
-            toggleArFacingMode();
-          }}
-          className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs border transition-all flex items-center space-x-1 shadow-lg cursor-pointer whitespace-nowrap shrink-0 ${
-            isArMode || isCvEnabled
-              ? "bg-cyan-500/25 text-cyan-200 border-cyan-400/60 font-semibold"
-              : "glass-panel text-slate-300 hover:text-white hover:border-cyan-400/40 border-white/10"
-          }`}
-          title="Switch between Front (Selfie) and Rear (Environment) Camera"
-          aria-label="Switch Camera Front or Rear"
-        >
-          <FlipHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400 shrink-0" />
-          <span className="sm:hidden">
-            {arFacingMode === "user" ? "FRONT" : "REAR"}
-          </span>
-          <span className="hidden sm:inline">
-            CAM: {arFacingMode === "user" ? "FRONT" : "REAR"}
-          </span>
-        </button>
-
-        {/* Toggle Computer Vision Hand & Gesture Tracking */}
+        {/* Toggle Computer Vision Hand & Gesture Engine */}
         <button
           type="button"
           onClick={() => {
@@ -863,12 +922,36 @@ export const ARComputerVisionHUD: React.FC = () => {
               ? "bg-cyan-500/30 text-cyan-200 border-cyan-400 shadow-[0_0_16px_rgba(0,240,255,0.45)] font-bold"
               : "glass-panel text-slate-300 hover:text-white hover:border-cyan-400/50 border-white/10"
           }`}
-          title="Toggle Computer Vision Hand Gestures (Fist Pause, Open Palm Resume, 4-Finger Swipe, Pinch Scale)"
+          title="Toggle Computer Vision Hand Gestures (Closed Hand Pause, Open Palm Resume, Slide Left/Right, Pinch In/Out)"
         >
           <Hand className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400 shrink-0" />
           <span className="sm:hidden">{isCvEnabled ? "CV:ON" : "CV"}</span>
           <span className="hidden sm:inline">
-            {isCvEnabled ? "CV GESTURES: ON" : "CV GESTURES"}
+            {isCvEnabled ? "CV VISION: ON" : "CV VISION"}
+          </span>
+        </button>
+
+        {/* Front / Rear Camera Switcher for Computer Vision */}
+        <button
+          type="button"
+          onClick={() => {
+            ProceduralAudio.playSelect();
+            toggleCameraFacingMode();
+          }}
+          className={`px-2 sm:px-2.5 py-1 sm:py-1.5 rounded text-[10px] sm:text-xs border transition-all flex items-center space-x-1 shadow-lg cursor-pointer whitespace-nowrap shrink-0 ${
+            isCvEnabled
+              ? "bg-cyan-500/20 text-cyan-200 border-cyan-400/50 font-semibold"
+              : "glass-panel text-slate-300 hover:text-white hover:border-cyan-400/40 border-white/10"
+          }`}
+          title="Switch Computer Vision Camera between Front and Rear"
+          aria-label="Switch Camera Front or Rear"
+        >
+          <FlipHorizontal className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-cyan-400 shrink-0" />
+          <span className="sm:hidden">
+            {cameraFacingMode === "user" ? "FRONT" : "REAR"}
+          </span>
+          <span className="hidden sm:inline">
+            CAM: {cameraFacingMode === "user" ? "FRONT" : "REAR"}
           </span>
         </button>
 
@@ -884,7 +967,7 @@ export const ARComputerVisionHUD: React.FC = () => {
               ? "bg-purple-500/30 text-purple-200 border-purple-400 font-bold"
               : "glass-panel text-purple-300 hover:text-white hover:border-purple-400/50 border-purple-400/30"
           }`}
-          title="Open Interactive Hand Gesture Tutorial (Fist, Palm, 4-Finger Swipe)"
+          title="Open Interactive Hand Gesture Tutorial"
         >
           <BookOpen className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-400 shrink-0" />
           <span className="sm:hidden">GUIDE</span>
@@ -909,7 +992,7 @@ export const ARComputerVisionHUD: React.FC = () => {
           title={
             isActivityPaused
               ? "Activity Paused (Show Open Palm or Click to Resume)"
-              : "Activity Running (Show Clenched Fist or Click to Pause)"
+              : "Activity Running (Show Closed Hand or Click to Pause)"
           }
         >
           {isActivityPaused ? (
@@ -931,12 +1014,13 @@ export const ARComputerVisionHUD: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              const next = Math.max(0.25, Number((objectScale - 0.25).toFixed(2)));
+              const next = Math.max(0.3, Number((objectScale - 0.25).toFixed(2)));
+              syncWorkerScale(next);
               setPinchTelemetry(0.15, "pinching_small", next);
               ProceduralAudio.playHover();
             }}
             className="p-0.5 rounded hover:bg-white/10 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer"
-            title="Pinch Object Smaller (-)"
+            title="Pinch In / Smaller (-)"
           >
             <Minimize2 className="w-3 h-3" />
           </button>
@@ -948,12 +1032,13 @@ export const ARComputerVisionHUD: React.FC = () => {
           <button
             type="button"
             onClick={() => {
-              const next = Math.min(3.0, Number((objectScale + 0.25).toFixed(2)));
+              const next = Math.min(2.8, Number((objectScale + 0.25).toFixed(2)));
+              syncWorkerScale(next);
               setPinchTelemetry(0.85, "pinching_big", next);
               ProceduralAudio.playHover();
             }}
             className="p-0.5 rounded hover:bg-white/10 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer"
-            title="Pinch Object Bigger (+)"
+            title="Pinch Out / Bigger (+)"
           >
             <Maximize2 className="w-3 h-3" />
           </button>
@@ -962,9 +1047,10 @@ export const ARComputerVisionHUD: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                smoothedScaleRef.current = 1.0;
+                syncWorkerScale(1.0);
                 setPinchTelemetry(0.45, "idle", 1.0);
-                setSimPinchRatio(0.27);
+                simPinchRatioRef.current = 0.28;
+                setSimPinchRatio(0.28);
                 ProceduralAudio.playSelect();
               }}
               className="p-0.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
@@ -976,7 +1062,7 @@ export const ARComputerVisionHUD: React.FC = () => {
         </div>
       </div>
 
-      {/* 3. Computer Vision Hand Tracking & Multi-Gesture Inspector Panel */}
+      {/* 2. Computer Vision Hand Tracking & Multi-Gesture Engine Panel */}
       {isCvEnabled && (
         <div
           className={`fixed top-[132px] sm:top-[150px] lg:top-[116px] left-2.5 right-2.5 sm:left-4 md:left-6 sm:right-auto z-30 sm:w-80 md:w-[340px] ${
@@ -990,7 +1076,7 @@ export const ARComputerVisionHUD: React.FC = () => {
             <div className="flex items-center space-x-1.5 min-w-0">
               <Scan className="w-4 h-4 text-cyan-400 shrink-0" />
               <span className="font-bold text-white tracking-wider text-[11px] truncate">
-                AR & CV GESTURE ENGINE
+                COMPUTER VISION ENGINE
               </span>
               {isWorkerActive && (
                 <span className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-[8px] text-emerald-300 font-bold shrink-0">
@@ -1017,16 +1103,16 @@ export const ARComputerVisionHUD: React.FC = () => {
             </div>
           </div>
 
-          {/* Dedicated Front / Rear Camera Switcher Bar inside AR/CV Panel */}
+          {/* Front / Rear Camera Switcher Bar */}
           <div className="mb-2.5 p-1 rounded bg-slate-950/90 border border-white/10 grid grid-cols-2 gap-1">
             <button
               type="button"
               onClick={() => {
                 ProceduralAudio.playSelect();
-                setArFacingMode("user");
+                setCameraFacingMode("user");
               }}
               className={`py-1.5 px-2 rounded text-[10px] font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                arFacingMode === "user"
+                cameraFacingMode === "user"
                   ? "bg-cyan-500/25 text-cyan-200 border border-cyan-400/60 shadow-[0_0_10px_rgba(0,240,255,0.25)]"
                   : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
               }`}
@@ -1039,10 +1125,10 @@ export const ARComputerVisionHUD: React.FC = () => {
               type="button"
               onClick={() => {
                 ProceduralAudio.playSelect();
-                setArFacingMode("environment");
+                setCameraFacingMode("environment");
               }}
               className={`py-1.5 px-2 rounded text-[10px] font-bold flex items-center justify-center space-x-1.5 transition-all cursor-pointer ${
-                arFacingMode === "environment"
+                cameraFacingMode === "environment"
                   ? "bg-emerald-500/25 text-emerald-200 border border-emerald-400/60 shadow-[0_0_10px_rgba(16,185,129,0.25)]"
                   : "text-slate-400 hover:text-white hover:bg-white/5 border border-transparent"
               }`}
@@ -1052,15 +1138,15 @@ export const ARComputerVisionHUD: React.FC = () => {
             </button>
           </div>
 
-          {/* Live Webcam Feed + 21-Landmark Skeleton Canvas Overlay */}
-          <div className="relative w-full h-28 sm:h-36 rounded bg-slate-950 border border-cyan-500/30 overflow-hidden mb-2.5">
+          {/* Live CV Sensor Viewport + 21-Landmark Skeleton Overlay */}
+          <div className="relative w-full h-32 sm:h-36 rounded bg-slate-950 border border-cyan-500/30 overflow-hidden mb-2.5">
             <video
               ref={hudVideoRef}
               playsInline
               muted
               autoPlay
-              className={`w-full h-full object-cover ${
-                arFacingMode === "user" ? "scale-x-[-1]" : ""
+              className={`w-full h-full object-contain bg-slate-950 ${
+                cameraFacingMode === "user" ? "scale-x-[-1]" : ""
               } ${cameraStatus === "active" ? "opacity-85" : "opacity-0"}`}
             />
             <canvas
@@ -1068,11 +1154,11 @@ export const ARComputerVisionHUD: React.FC = () => {
               width={256}
               height={144}
               className={`absolute inset-0 w-full h-full pointer-events-none ${
-                arFacingMode === "user" ? "scale-x-[-1]" : ""
+                cameraFacingMode === "user" ? "scale-x-[-1]" : ""
               }`}
             />
 
-            {/* Status Badge inside Viewport */}
+            {/* Status & 5-Finger Telemetry Strip */}
             <div className="absolute top-1.5 left-1.5 right-1.5 flex items-center justify-between gap-1 pointer-events-none">
               <div className="flex items-center space-x-1.5 bg-slate-950/85 px-2 py-0.5 rounded border border-white/10 text-[9px] truncate">
                 <span
@@ -1087,17 +1173,32 @@ export const ARComputerVisionHUD: React.FC = () => {
                 <span className="text-slate-200 truncate">
                   {cameraStatus === "active"
                     ? detectedHandsCount > 0
-                      ? `HAND LOCKED (${detectedHandsCount})`
-                      : "SHOW HAND TO CAMERA"
+                      ? "HAND LOCKED"
+                      : "SHOW HAND"
                     : cameraStatus === "initializing"
-                    ? "STARTING CAMERA..."
-                    : "SIMULATOR ACTIVE"}
+                    ? "STARTING CV..."
+                    : "SIMULATOR"}
                 </span>
               </div>
 
-              <span className="bg-slate-950/85 px-1.5 py-0.5 rounded border border-cyan-500/30 text-[9px] text-cyan-300 font-semibold shrink-0">
-                {arFacingMode === "user" ? "FRONT" : "REAR"}
-              </span>
+              {/* 5-Finger Live State Dots: Thumb, Index, Middle, Ring, Pinky */}
+              <div className="flex items-center space-x-0.5 bg-slate-950/85 px-1.5 py-0.5 rounded border border-white/10 shrink-0">
+                {fingerChips.map((f) => {
+                  const ext = fingerStates[f.key];
+                  return (
+                    <span
+                      key={f.key}
+                      className={`w-3.5 h-3.5 rounded text-[8px] font-bold flex items-center justify-center ${
+                        ext
+                          ? "bg-cyan-500/35 text-cyan-200 border border-cyan-400/70"
+                          : "bg-slate-800/80 text-slate-500 border border-white/5"
+                      }`}
+                    >
+                      {f.label}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
 
             {cameraStatus !== "active" && (
@@ -1128,34 +1229,36 @@ export const ARComputerVisionHUD: React.FC = () => {
 
             <div className="absolute bottom-0 inset-x-0 bg-slate-950/90 px-2 py-1 border-t border-white/10 flex items-center justify-between text-[9px] gap-1">
               <span className="text-slate-400 truncate">
-                GESTURE: <strong className="text-cyan-300">{lastGestureLabel}</strong>
+                POSE: <strong className="text-cyan-300">{lastGestureLabel}</strong>
               </span>
               <span
                 className={`font-bold shrink-0 ${
-                  isActivityPaused
+                  activeMode === "fist" || isActivityPaused
                     ? "text-amber-400"
-                    : pinchState === "pinching_big"
+                    : activeMode === "pinch_out" || pinchState === "pinching_big"
                     ? "text-emerald-400"
-                    : pinchState === "pinching_small"
+                    : activeMode === "pinch_in" || pinchState === "pinching_small"
                     ? "text-pink-400"
+                    : activeMode === "swipe_left" || activeMode === "swipe_right"
+                    ? "text-purple-300"
                     : "text-cyan-300"
                 }`}
               >
-                {isActivityPaused
+                {activeMode === "fist" || isActivityPaused
                   ? "⏸ PAUSED"
-                  : pinchState === "pinching_big"
-                  ? "▲ BIGGER"
-                  : pinchState === "pinching_small"
-                  ? "▼ SMALLER"
+                  : activeMode === "pinch_out" || pinchState === "pinching_big"
+                  ? "▲ PINCH OUT"
+                  : activeMode === "pinch_in" || pinchState === "pinching_small"
+                  ? "▼ PINCH IN"
                   : `${objectScale.toFixed(2)}x`}
               </span>
             </div>
           </div>
 
-          {/* CV Feature 1 & 2: Clenched Fist (Pause) & Open Palm (Resume) */}
+          {/* CV Feature 1 & 2: Closed Hand (Pause) & Open Palm (Resume) */}
           <div className="mb-2.5">
             <div className="flex items-center justify-between text-[9px] text-slate-400 mb-1">
-              <span>HAND POSTURE ACTIVITY CONTROL</span>
+              <span>HAND POSTURE CONTROL</span>
               <span className={isActivityPaused ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
                 {isActivityPaused ? "STATUS: PAUSED" : "STATUS: ACTIVE"}
               </span>
@@ -1165,14 +1268,14 @@ export const ARComputerVisionHUD: React.FC = () => {
                 type="button"
                 onClick={triggerFistPause}
                 className={`p-2 rounded border text-left transition-all cursor-pointer ${
-                  isActivityPaused || cvGesture === "fist_pause"
+                  activeMode === "fist" || isActivityPaused || cvGesture === "fist_pause"
                     ? "bg-amber-500/25 border-amber-400 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.3)]"
                     : "bg-black/40 border-white/10 text-slate-300 hover:border-amber-400/50 hover:text-white"
                 }`}
-                title="Show Clenched Fist to Pause 3D Activity"
+                title="Show Closed Hand / Fist to Pause 3D Activity"
               >
                 <div className="flex items-center justify-between text-[10px] font-bold text-amber-300 mb-0.5">
-                  <span>CLENCHED FIST</span>
+                  <span>CLOSED HAND</span>
                   <Pause className="w-3 h-3 shrink-0" />
                 </div>
                 <div className="text-[9px] text-slate-400">Pause Activity</div>
@@ -1182,7 +1285,7 @@ export const ARComputerVisionHUD: React.FC = () => {
                 type="button"
                 onClick={triggerPalmResume}
                 className={`p-2 rounded border text-left transition-all cursor-pointer ${
-                  !isActivityPaused && cvGesture === "palm_resume"
+                  activeMode === "palm" || (!isActivityPaused && cvGesture === "palm_resume")
                     ? "bg-emerald-500/25 border-emerald-400 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
                     : "bg-black/40 border-white/10 text-slate-300 hover:border-emerald-400/50 hover:text-white"
                 }`}
@@ -1197,10 +1300,10 @@ export const ARComputerVisionHUD: React.FC = () => {
             </div>
           </div>
 
-          {/* CV Feature 3: 4-Finger Left/Right Swipe Zone Navigation */}
+          {/* CV Feature 3: Slide Left / Slide Right Zone Navigation */}
           <div className="mb-2.5 p-2 rounded bg-black/40 border border-white/10">
             <div className="flex items-center justify-between text-[9px] text-slate-400 mb-1.5">
-              <span>4-FINGER SWIPE (LEFT / RIGHT)</span>
+              <span>SLIDE LEFT / RIGHT (ZONES)</span>
               <span className="text-purple-300 font-bold">
                 ZONE: {ZONE_SHORT_NAMES[currentZone]}
               </span>
@@ -1211,27 +1314,27 @@ export const ARComputerVisionHUD: React.FC = () => {
                 type="button"
                 onClick={() => triggerFourFingerSwipe("prev")}
                 className={`py-1.5 px-2 rounded border text-[10px] font-bold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
-                  cvGesture === "swipe_left"
+                  activeMode === "swipe_left" || cvGesture === "swipe_left"
                     ? "bg-purple-500/30 border-purple-400 text-purple-200"
                     : "bg-purple-500/10 hover:bg-purple-500/25 border-purple-400/40 text-purple-300"
                 }`}
-                title="Move 4 Fingers Left for Previous Zone"
+                title="Slide Hand Left for Previous Zone"
               >
                 <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
-                <span>4F LEFT (PREV)</span>
+                <span>SLIDE LEFT</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => triggerFourFingerSwipe("next")}
                 className={`py-1.5 px-2 rounded border text-[10px] font-bold flex items-center justify-center space-x-1 transition-all cursor-pointer ${
-                  cvGesture === "swipe_right"
+                  activeMode === "swipe_right" || cvGesture === "swipe_right"
                     ? "bg-purple-500/30 border-purple-400 text-purple-200"
                     : "bg-purple-500/10 hover:bg-purple-500/25 border-purple-400/40 text-purple-300"
                 }`}
-                title="Move 4 Fingers Right for Next Zone"
+                title="Slide Hand Right for Next Zone"
               >
-                <span>4F RIGHT (NEXT)</span>
+                <span>SLIDE RIGHT</span>
                 <ChevronRight className="w-3.5 h-3.5 shrink-0" />
               </button>
             </div>
@@ -1260,11 +1363,11 @@ export const ARComputerVisionHUD: React.FC = () => {
             </div>
           </div>
 
-          {/* CV Feature 4: Interactive Pinch Distance Slider */}
+          {/* CV Feature 4: Pinch In / Pinch Out Scale Controls */}
           <div className="space-y-2">
             <div>
               <div className="flex justify-between items-center text-[9px] text-slate-300 mb-1">
-                <span className="truncate">PINCH SCALE: {targetObjectName}</span>
+                <span className="truncate">PINCH IN / OUT: {targetObjectName}</span>
                 <span className="text-cyan-300 font-bold shrink-0 tabular-nums">
                   {Math.round((pinchDistance ?? simPinchRatio) * 100)}% →{" "}
                   {objectScale.toFixed(2)}x
@@ -1278,6 +1381,7 @@ export const ARComputerVisionHUD: React.FC = () => {
                 value={pinchDistance ?? simPinchRatio}
                 onChange={(e) => {
                   const val = parseFloat(e.target.value);
+                  simPinchRatioRef.current = val;
                   setSimPinchRatio(val);
                   applyPinchRatioToScale(val);
                 }}
@@ -1292,14 +1396,14 @@ export const ARComputerVisionHUD: React.FC = () => {
                 ProceduralAudio.playHover();
               }}
               className="w-full py-1 px-2.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-[9px] flex items-center justify-between transition-all cursor-pointer"
-              title="Swap whether pinching fingers closer makes object bigger or smaller"
+              title="Swap whether pinching fingers closer shrinks or expands objects"
             >
               <span className="flex items-center space-x-1.5">
                 <ArrowLeftRight className="w-3 h-3 text-amber-400" />
                 <span>PINCH POLARITY:</span>
               </span>
               <span className="text-amber-300 font-semibold">
-                {invertPinch ? "CLOSE = BIGGER" : "SPREAD = BIGGER"}
+                {invertPinch ? "PINCH IN = BIGGER" : "PINCH OUT = BIGGER"}
               </span>
             </button>
           </div>

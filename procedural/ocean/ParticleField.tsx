@@ -62,7 +62,6 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
       const color1 = new THREE.Color("#8b5cf6"); // violet
       const color2 = new THREE.Color("#00f0ff"); // cyan
       const color3 = new THREE.Color("#ec4899"); // magenta
-      const tempColor = new THREE.Color();
 
       const side = Math.cbrt(count);
       const spacing = 1.2;
@@ -103,14 +102,10 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
         current[i * 3 + 2] = wave[i * 3 + 2];
 
         const t = i / count;
-        if (t < 0.5) {
-          tempColor.copy(color1).lerp(color2, t * 2);
-        } else {
-          tempColor.copy(color2).lerp(color3, (t - 0.5) * 2);
-        }
-        col[i * 3] = tempColor.r;
-        col[i * 3 + 1] = tempColor.g;
-        col[i * 3 + 2] = tempColor.b;
+        const c = t < 0.5 ? color1.clone().lerp(color2, t * 2) : color2.clone().lerp(color3, (t - 0.5) * 2);
+        col[i * 3] = c.r;
+        col[i * 3 + 1] = c.g;
+        col[i * 3 + 2] = c.b;
       }
 
       return {
@@ -170,55 +165,38 @@ export const ParticleField: React.FC<ParticleFieldProps> = ({
     const posArray = posAttr.array as Float32Array;
     const lerpSpeed = Math.min(1.0, delta * 3.5);
 
-    if (active === "wave") {
-      for (let i = 0; i < count; i++) {
-        const idx = i * 3;
-        const targetX = wavePositions[idx];
+    for (let i = 0; i < count; i++) {
+      const idx = i * 3;
+      let targetX = 0;
+      let targetY = 0;
+      let targetZ = 0;
+
+      if (active === "wave") {
+        targetX = wavePositions[idx];
         const u = wavePositions[idx] * 0.12;
         const v = wavePositions[idx + 2] * 0.12;
-        const targetY =
+        targetY =
           Math.sin(u + time * 1.5) * 2.2 +
           Math.cos(v + time * 1.2) * 1.8 +
           Math.sin((u + v) * 0.5 + time) * 1.0;
-        const targetZ = wavePositions[idx + 2];
-
-        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
-        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
-        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
+        targetZ = wavePositions[idx + 2];
+      } else if (active === "sphere") {
+        targetX = spherePositions[idx];
+        targetY = spherePositions[idx + 1];
+        targetZ = spherePositions[idx + 2];
+      } else if (active === "lattice") {
+        targetX = latticePositions[idx];
+        targetY = latticePositions[idx + 1];
+        targetZ = latticePositions[idx + 2];
+      } else {
+        targetX = chaosPositions[idx] + Math.sin(time + i) * 0.2;
+        targetY = chaosPositions[idx + 1] + Math.cos(time + i) * 0.2;
+        targetZ = chaosPositions[idx + 2];
       }
-    } else if (active === "sphere") {
-      for (let i = 0; i < count; i++) {
-        const idx = i * 3;
-        const targetX = spherePositions[idx];
-        const targetY = spherePositions[idx + 1];
-        const targetZ = spherePositions[idx + 2];
 
-        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
-        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
-        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
-      }
-    } else if (active === "lattice") {
-      for (let i = 0; i < count; i++) {
-        const idx = i * 3;
-        const targetX = latticePositions[idx];
-        const targetY = latticePositions[idx + 1];
-        const targetZ = latticePositions[idx + 2];
-
-        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
-        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
-        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
-      }
-    } else {
-      for (let i = 0; i < count; i++) {
-        const idx = i * 3;
-        const targetX = chaosPositions[idx] + Math.sin(time + i) * 0.2;
-        const targetY = chaosPositions[idx + 1] + Math.cos(time + i) * 0.2;
-        const targetZ = chaosPositions[idx + 2];
-
-        posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
-        posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
-        posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
-      }
+      posArray[idx] += (targetX - posArray[idx]) * lerpSpeed;
+      posArray[idx + 1] += (targetY - posArray[idx + 1]) * lerpSpeed;
+      posArray[idx + 2] += (targetZ - posArray[idx + 2]) * lerpSpeed;
     }
 
     posAttr.needsUpdate = true;

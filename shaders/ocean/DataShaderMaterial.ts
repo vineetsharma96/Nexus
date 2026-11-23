@@ -1,5 +1,3 @@
-import * as THREE from "three";
-
 /**
  * Custom GLSL Shader for Data Ocean Particles
  * Features:

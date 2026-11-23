@@ -29,10 +29,8 @@ const NexusCanvas = dynamic(() => import("@/components/canvas/NexusCanvas"), {
 });
 
 export default function NexusExperience() {
-  const isBooted = useWorldStore((state) => state.isBooted);
   const currentZone = useWorldStore((state) => state.currentZone);
   const colorScheme = useWorldStore((state) => state.colorScheme);
-  const isArMode = useWorldStore((state) => state.isArMode);
   const activeZoneMeta = ZONES_METADATA[currentZone];
 
   // Dynamic ambient glow depending on colorScheme or zone
@@ -49,31 +47,25 @@ export default function NexusExperience() {
   useScrollWorld();
 
   return (
-    <main
-      className={`relative w-full h-[100dvh] overflow-hidden text-slate-100 ${
-        isArMode ? "bg-transparent" : "bg-[#030712]"
-      }`}
-    >
+    <main className="relative w-full h-[100dvh] overflow-hidden text-slate-100 bg-[#030712]">
       {/* Background Matrix & Tech Grid Shell */}
       <div className="absolute inset-0 tech-grid opacity-20 pointer-events-none z-10" />
       <div className="absolute inset-0 scanlines opacity-30 pointer-events-none z-10" />
 
       {/* Dynamic Zone Ambient Light Glow */}
-      {!isArMode && (
-        <div
-          className="absolute inset-0 transition-colors duration-1000 pointer-events-none opacity-25"
-          style={{
-            background: `radial-gradient(circle at 50% 50%, ${ambientColor}33 0%, transparent 70%)`,
-          }}
-        />
-      )}
+      <div
+        className="absolute inset-0 transition-colors duration-1000 pointer-events-none opacity-25"
+        style={{
+          background: `radial-gradient(circle at 50% 50%, ${ambientColor}33 0%, transparent 70%)`,
+        }}
+      />
 
       {/* Primary 3D WebGL Canvas Layer */}
       <div id="nexus-canvas-container" className="absolute inset-0 z-10">
         <NexusCanvas />
       </div>
 
-      {/* AR Camera Passthrough & Computer Vision Hand Pinch Tracking HUD */}
+      {/* Computer Vision Hand Gesture Tracking HUD */}
       <ARComputerVisionHUD />
 
       {/* Interactive Hand Gesture Tutorial Overlay */}

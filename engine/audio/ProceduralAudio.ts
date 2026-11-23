@@ -15,7 +15,8 @@ export class ProceduralAudio {
   private static getContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const win = window as Window & { webkitAudioContext?: typeof AudioContext };
+      const AudioCtx = window.AudioContext || win.webkitAudioContext;
       if (AudioCtx) {
         this.ctx = new AudioCtx();
       }

@@ -48,7 +48,7 @@ export const SceneCommandSchema = z.discriminatedUnion("action", [
     scale: z.number().min(0.2).max(3.5),
   }),
   z.object({
-    action: z.literal("toggle_ar"),
+    action: z.literal("toggle_cv"),
     enabled: z.boolean(),
   }),
 ]);

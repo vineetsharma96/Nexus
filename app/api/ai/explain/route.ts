@@ -14,6 +14,14 @@ function isRateLimited(ip: string, maxReq: number = 25, windowMs: number = 60000
     return true;
   }
 
+  if (rateLimitMap.size > 500) {
+    for (const [key, times] of rateLimitMap.entries()) {
+      if (times.every((t) => now - t >= windowMs)) {
+        rateLimitMap.delete(key);
+      }
+    }
+  }
+
   validTimestamps.push(now);
   rateLimitMap.set(ip, validTimestamps);
   return false;
@@ -30,29 +38,32 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let body: unknown;
+    let body: Record<string, unknown>;
     try {
-      body = await req.json();
+      const parsed: unknown = await req.json();
+      if (!parsed || typeof parsed !== "object") {
+        return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
+      }
+      body = parsed as Record<string, unknown>;
     } catch {
       return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
     }
 
-    const payload = (typeof body === 'object' && body !== null) ? body as Record<string, unknown> : {};
-
     // Sanitize objectId and zoneId
-    const objectId = typeof payload.objectId === "string"
-      ? payload.objectId.slice(0, 50).replace(/[^\w-]/g, "")
+    const objectId = typeof body?.objectId === "string"
+      ? body.objectId.slice(0, 50).replace(/[^\w-]/g, "")
       : "unknown";
 
-    const zoneId = typeof payload.zoneId === "string"
-      ? payload.zoneId.slice(0, 50).replace(/[^\w-]/g, "")
+    const zoneId = typeof body?.zoneId === "string"
+      ? body.zoneId.slice(0, 50).replace(/[^\w-]/g, "")
       : "core";
 
     const provider = getAIProvider();
     let explanation: string;
     try {
       explanation = await provider.explainObject(objectId, zoneId);
-    } catch {
+    } catch (apiErr) {
+      console.warn("[NEXUS API /api/ai/explain] Primary AI provider error, falling back to heuristics:", apiErr);
       const fallback = new FallbackProvider();
       explanation = await fallback.explainObject(objectId, zoneId);
     }

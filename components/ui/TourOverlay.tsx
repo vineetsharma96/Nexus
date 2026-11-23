@@ -10,8 +10,6 @@ import {
   Bot,
   Play,
   Pause,
-  Volume2,
-  VolumeX,
   Sparkles,
 } from "lucide-react";
 
@@ -28,10 +26,11 @@ export const TourOverlay: React.FC = () => {
   const setOceanState = useWorldStore((state) => state.setOceanState);
   const isAudioMuted = useWorldStore((state) => state.isAudioMuted);
 
-  const [timerProgress, setTimerProgress] = useState(0);
+  const [progressState, setProgressState] = useState({ step: -1, pct: 0 });
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentStepData = TOUR_STEPS[tourCurrentStep] || TOUR_STEPS[0];
+  const timerProgress = progressState.step === tourCurrentStep ? progressState.pct : 0;
 
   // Synchronize zone & environmental effects when step changes
   useEffect(() => {
@@ -62,7 +61,6 @@ export const TourOverlay: React.FC = () => {
       return;
     }
 
-    setTimerProgress(0);
     const durationMs = (currentStepData.durationSeconds || 9) * 1000;
     const intervalMs = 100;
     let elapsed = 0;
@@ -70,7 +68,7 @@ export const TourOverlay: React.FC = () => {
     timerRef.current = setInterval(() => {
       elapsed += intervalMs;
       const pct = Math.min(100, (elapsed / durationMs) * 100);
-      setTimerProgress(pct);
+      setProgressState({ step: tourCurrentStep, pct });
 
       if (elapsed >= durationMs) {
         if (timerRef.current) clearInterval(timerRef.current);

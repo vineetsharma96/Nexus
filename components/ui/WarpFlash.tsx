@@ -5,27 +5,33 @@ import { useWorldStore } from "@/engine/store/useWorldStore";
 import { ProceduralAudio } from "@/engine/audio/ProceduralAudio";
 
 export const WarpFlash: React.FC = () => {
-  const currentZone = useWorldStore((state) => state.currentZone);
-  const previousZone = useWorldStore((state) => state.previousZone);
-  const isReducedMotion = useWorldStore((state) => state.isReducedMotion);
-  const isBooted = useWorldStore((state) => state.isBooted);
-
   const [isFlashing, setIsFlashing] = useState(false);
 
   useEffect(() => {
-    // Only flash if transitioning between zones after initial boot
-    if (!isBooted || !previousZone || previousZone === currentZone || isReducedMotion) {
-      return;
-    }
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = useWorldStore.subscribe((state, prevState) => {
+      if (
+        !state.isBooted ||
+        state.isReducedMotion ||
+        state.currentZone === prevState.currentZone ||
+        !state.previousZone
+      ) {
+        return;
+      }
 
-    setIsFlashing(true);
-    ProceduralAudio.playPortalWarp();
-    const timer = setTimeout(() => {
-      setIsFlashing(false);
-    }, 600);
+      setIsFlashing(true);
+      ProceduralAudio.playPortalWarp();
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        setIsFlashing(false);
+      }, 600);
+    });
 
-    return () => clearTimeout(timer);
-  }, [currentZone, previousZone, isBooted, isReducedMotion]);
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
 
   if (!isFlashing) return null;
 

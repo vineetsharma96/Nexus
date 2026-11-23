@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ZoneId, QualityTier, CameraMode, OceanState, PointOfInterest, ColorScheme } from "@/types/world";
+import { ZoneId, QualityTier, CameraMode, OceanState, PointOfInterest } from "@/types/world";
 
 export type CvGestureType =
   | "idle"
@@ -28,7 +28,7 @@ export interface WorldState {
   savedEnvironmentSpeed: number;
   isActivityPaused: boolean;
   lightingIntensity: number;
-  colorScheme: ColorScheme;
+  colorScheme: "default" | "cyber" | "amber" | "monochrome";
 
   // System & Telemetry
   isBooted: boolean;
@@ -45,8 +45,7 @@ export interface WorldState {
   tourCurrentStep: number;
   tourTotalSteps: number;
 
-  // AR & Computer Vision Gestures
-  isArMode: boolean;
+  // Computer Vision Gestures
   isCvEnabled: boolean;
   isGestureTutorialOpen: boolean;
   hasSeenGestureTutorial: boolean;
@@ -55,7 +54,7 @@ export interface WorldState {
   pinchState: "idle" | "pinching_small" | "pinching_big";
   cvGesture: CvGestureType;
   invertPinch: boolean;
-  arFacingMode: "user" | "environment";
+  cameraFacingMode: "user" | "environment";
 
   // Actions
   setBooted: (isBooted: boolean) => void;
@@ -85,8 +84,6 @@ export interface WorldState {
   prevTourStep: () => void;
   endTour: () => void;
   resetWorld: () => void;
-  setArMode: (active: boolean) => void;
-  toggleArMode: () => void;
   setCvEnabled: (enabled: boolean) => void;
   toggleCvEnabled: () => void;
   setObjectScale: (scale: number) => void;
@@ -97,8 +94,8 @@ export interface WorldState {
   ) => void;
   setCvGesture: (gesture: CvGestureType) => void;
   toggleInvertPinch: () => void;
-  setArFacingMode: (mode: "user" | "environment") => void;
-  toggleArFacingMode: () => void;
+  setCameraFacingMode: (mode: "user" | "environment") => void;
+  toggleCameraFacingMode: () => void;
 }
 
 export const useWorldStore = create<WorldState>((set) => ({
@@ -130,7 +127,6 @@ export const useWorldStore = create<WorldState>((set) => ({
   tourCurrentStep: 0,
   tourTotalSteps: 7,
 
-  isArMode: false,
   isCvEnabled: false,
   isGestureTutorialOpen: false,
   hasSeenGestureTutorial: false,
@@ -139,7 +135,7 @@ export const useWorldStore = create<WorldState>((set) => ({
   pinchState: "idle",
   cvGesture: "idle",
   invertPinch: false,
-  arFacingMode: "user",
+  cameraFacingMode: "user",
 
   setBooted: (isBooted) => set({ isBooted }),
   setBootProgress: (progress, text) =>
@@ -284,31 +280,9 @@ export const useWorldStore = create<WorldState>((set) => ({
       cvGesture: "idle",
     }),
 
-  setArMode: (isArMode) =>
-    set((state) => ({
-      isArMode,
-      isCvEnabled: isArMode ? true : state.isCvEnabled,
-      isSandboxOpen:
-        isArMode && typeof window !== "undefined" && window.innerWidth < 640
-          ? false
-          : state.isSandboxOpen,
-    })),
-  toggleArMode: () =>
-    set((state) => {
-      const nextAr = !state.isArMode;
-      return {
-        isArMode: nextAr,
-        isCvEnabled: nextAr ? true : state.isCvEnabled,
-        isSandboxOpen:
-          nextAr && typeof window !== "undefined" && window.innerWidth < 640
-            ? false
-            : state.isSandboxOpen,
-      };
-    }),
   setCvEnabled: (isCvEnabled) =>
     set((state) => ({
       isCvEnabled,
-      isArMode: !isCvEnabled ? false : state.isArMode,
       pinchDistance: !isCvEnabled ? null : state.pinchDistance,
       pinchState: !isCvEnabled ? "idle" : state.pinchState,
       cvGesture: !isCvEnabled ? "idle" : state.cvGesture,
@@ -322,7 +296,6 @@ export const useWorldStore = create<WorldState>((set) => ({
       const nextCv = !state.isCvEnabled;
       return {
         isCvEnabled: nextCv,
-        isArMode: !nextCv ? false : state.isArMode,
         pinchDistance: !nextCv ? null : state.pinchDistance,
         pinchState: !nextCv ? "idle" : state.pinchState,
         cvGesture: !nextCv ? "idle" : state.cvGesture,
@@ -334,19 +307,18 @@ export const useWorldStore = create<WorldState>((set) => ({
     }),
   setObjectScale: (scale) =>
     set({
-      objectScale: Math.max(0.2, Math.min(3.5, scale)),
+      objectScale: Math.max(0.25, Math.min(3.2, scale)),
     }),
   setPinchTelemetry: (pinchDistance, pinchState, scale) =>
     set((state) => {
       const nextScale =
         scale !== undefined
-          ? Math.max(0.2, Math.min(3.5, scale))
+          ? Math.max(0.25, Math.min(3.2, scale))
           : state.objectScale;
-      // Avoid redundant store updates when values haven't meaningfully changed
       if (
         state.pinchState === pinchState &&
-        Math.abs((state.pinchDistance ?? 0) - (pinchDistance ?? 0)) < 0.02 &&
-        Math.abs(state.objectScale - nextScale) < 0.02
+        Math.abs((state.pinchDistance ?? 0) - (pinchDistance ?? 0)) < 0.01 &&
+        Math.abs(state.objectScale - nextScale) < 0.01
       ) {
         return state;
       }
@@ -365,9 +337,9 @@ export const useWorldStore = create<WorldState>((set) => ({
   setCvGesture: (cvGesture) => set({ cvGesture }),
   toggleInvertPinch: () =>
     set((state) => ({ invertPinch: !state.invertPinch })),
-  setArFacingMode: (arFacingMode) => set({ arFacingMode }),
-  toggleArFacingMode: () =>
+  setCameraFacingMode: (cameraFacingMode) => set({ cameraFacingMode }),
+  toggleCameraFacingMode: () =>
     set((state) => ({
-      arFacingMode: state.arFacingMode === "user" ? "environment" : "user",
+      cameraFacingMode: state.cameraFacingMode === "user" ? "environment" : "user",
     })),
 }));

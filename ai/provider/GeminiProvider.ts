@@ -5,7 +5,7 @@ export class GeminiProvider implements IAIProvider {
   private apiKey: string;
   private model: string;
 
-  constructor(apiKey: string, model: string = "gemini-3.8-flash") {
+  constructor(apiKey: string, model: string = "gemini-2.5-flash") {
     this.apiKey = apiKey;
     this.model = model;
   }
@@ -37,11 +37,14 @@ Current spatial context:
 Respond ONLY with raw JSON. Never execute arbitrary code or scripts.
 `;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": this.apiKey,
+      },
       body: JSON.stringify({
         contents: [
           {
@@ -80,13 +83,16 @@ Respond ONLY with raw JSON. Never execute arbitrary code or scripts.
   }
 
   async explainObject(objectId: string, zoneId: string): Promise<string> {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent`;
 
     const prompt = `Provide a concise, 2-sentence futuristic architectural summary of the procedural object "${objectId}" situated in "${zoneId}" of NEXUS.`;
 
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": this.apiKey,
+      },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: { temperature: 0.3, maxOutputTokens: 120 },

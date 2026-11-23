@@ -1,50 +1,57 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import { useWorldStore } from "@/engine/store/useWorldStore";
+
+const subscribeTouchQuery = (onChange: () => void) => {
+  if (typeof window === "undefined" || !window.matchMedia) return () => {};
+  const mq = window.matchMedia("(pointer: coarse)");
+  mq.addEventListener?.("change", onChange);
+  return () => mq.removeEventListener?.("change", onChange);
+};
+
+const getIsTouchSnapshot = () =>
+  typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
 export const CustomCursor: React.FC = () => {
   const selectedPoi = useWorldStore((state) => state.selectedPoi);
   const isBooted = useWorldStore((state) => state.isBooted);
 
-  const [pos, setPos] = useState({ x: -100, y: -100 });
   const [isHoveringClickable, setIsHoveringClickable] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const isTouchDevice = useSyncExternalStore(subscribeTouchQuery, getIsTouchSnapshot, () => false);
 
   const cursorRef = useRef<HTMLDivElement>(null);
+  const targetPos = useRef({ x: -100, y: -100 });
   const trailingPos = useRef({ x: -100, y: -100 });
 
   useEffect(() => {
-    // Detect touch device to avoid rendering desktop cursor
-    if (window.matchMedia("(pointer: coarse)").matches) {
-      setIsTouchDevice(true);
-      return;
-    }
+    if (isTouchDevice) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      setPos({ x: e.clientX, y: e.clientY });
+      targetPos.current.x = e.clientX;
+      targetPos.current.y = e.clientY;
 
-      // Check if cursor style is pointer
-      const target = e.target as HTMLElement;
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
       const isPointer =
         window.getComputedStyle(target).cursor === "pointer" ||
         target.closest("button") !== null ||
         target.closest("a") !== null;
-      setIsHoveringClickable(isPointer);
+      setIsHoveringClickable((prev) => (prev === isPointer ? prev : isPointer));
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
     return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
+  }, [isTouchDevice]);
 
-  // Smooth cursor trailing loop
+  // Smooth cursor trailing loop without restarting rAF on mousemove
   useEffect(() => {
     if (isTouchDevice) return;
 
     let animId: number;
     const updateTrailing = () => {
-      trailingPos.current.x += (pos.x - trailingPos.current.x) * 0.2;
-      trailingPos.current.y += (pos.y - trailingPos.current.y) * 0.2;
+      trailingPos.current.x += (targetPos.current.x - trailingPos.current.x) * 0.2;
+      trailingPos.current.y += (targetPos.current.y - trailingPos.current.y) * 0.2;
 
       if (cursorRef.current) {
         cursorRef.current.style.transform = `translate3d(${trailingPos.current.x}px, ${trailingPos.current.y}px, 0) translate(-50%, -50%)`;
@@ -54,7 +61,7 @@ export const CustomCursor: React.FC = () => {
 
     animId = requestAnimationFrame(updateTrailing);
     return () => cancelAnimationFrame(animId);
-  }, [pos, isTouchDevice]);
+  }, [isTouchDevice]);
 
   if (isTouchDevice || !isBooted) return null;
 

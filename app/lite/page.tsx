@@ -8,11 +8,6 @@ import {
   Compass,
   ArrowLeft,
   Cpu,
-  Layers,
-  Sparkles,
-  Bot,
-  Database,
-  ExternalLink,
 } from "lucide-react";
 
 export default function NexusLitePage() {

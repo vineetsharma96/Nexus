@@ -2,7 +2,8 @@ import { IAIProvider, SceneContext, AIInterpretationResult } from "./AIProvider.
 import { SceneCommand } from "@/types/commands";
 
 export class FallbackProvider implements IAIProvider {
-  async interpretCommand(prompt: string, context: SceneContext): Promise<AIInterpretationResult> {
+  async interpretCommand(prompt: string, _context: SceneContext): Promise<AIInterpretationResult> {
+    void _context;
     const p = prompt.toLowerCase();
     let command: SceneCommand | undefined;
     let narration = "NEXUS Fallback Heuristic Subsystem processed your instruction.";
@@ -43,9 +44,12 @@ export class FallbackProvider implements IAIProvider {
     } else if (p.includes("smaller") || p.includes("shrink") || p.includes("small") || p.includes("scale down")) {
       command = { action: "scale_object", scale: 0.45 };
       narration = "Computer Vision Pinch Vector contracted — scaling 3D object manifold to 0.45x.";
-    } else if (p.includes("ar") || p.includes("augmented") || p.includes("camera") || p.includes("vision") || p.includes("pinch")) {
-      command = { action: "toggle_ar", enabled: !p.includes("off") && !p.includes("disable") };
-      narration = "Augmented Reality optical passthrough and 21-point Computer Vision hand pinch tracker engaged.";
+    } else if (p.includes("camera") || p.includes("vision") || p.includes("gesture") || p.includes("pinch") || p.includes("cv")) {
+      const enabled = !p.includes("off") && !p.includes("disable") && !p.includes("stop");
+      command = { action: "toggle_cv", enabled };
+      narration = enabled
+        ? "Computer Vision 21-point hand-gesture engine engaged (Pinch In/Out, Open Palm, Closed Hand, Slide Left/Right)."
+        : "Computer Vision hand-gesture engine disengaged.";
     } else {
       narration = `NEXUS parsed directive: "${prompt}". Environmental parameters calibrated.`;
     }

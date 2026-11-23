@@ -118,7 +118,7 @@ export const CoreGeometry: React.FC = () => {
     }
   });
 
-  const handlePointerOver = (e: ThreeEvent<MouseEvent>) => {
+  const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     setHovered(true);
     ProceduralAudio.playHover();

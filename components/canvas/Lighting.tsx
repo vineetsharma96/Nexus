@@ -6,7 +6,6 @@ import { useWorldStore } from "@/engine/store/useWorldStore";
 export const Lighting: React.FC = () => {
   const lightingIntensity = useWorldStore((state) => state.lightingIntensity);
   const colorScheme = useWorldStore((state) => state.colorScheme);
-  const isArMode = useWorldStore((state) => state.isArMode);
 
   // Dynamic light tint depending on colorScheme
   const keyColor =
@@ -19,15 +18,12 @@ export const Lighting: React.FC = () => {
   return (
     <>
       {/* Subtle ambient fill to keep shadows deep and cinematic */}
-      <ambientLight
-        intensity={(isArMode ? 0.65 : 0.25) * lightingIntensity}
-        color={isArMode ? "#ffffff" : "#0f172a"}
-      />
+      <ambientLight intensity={0.25 * lightingIntensity} color="#0f172a" />
 
       {/* Cool directional key light */}
       <directionalLight
         position={[20, 30, 20]}
-        intensity={(isArMode ? 1.2 : 0.8) * lightingIntensity}
+        intensity={0.8 * lightingIntensity}
         color="#e0f2fe"
       />
 
@@ -38,8 +34,8 @@ export const Lighting: React.FC = () => {
         color={keyColor}
       />
 
-      {/* Atmospheric Fog (disabled in AR passthrough mode) */}
-      {!isArMode && <fog attach="fog" args={["#030712", 20, 90]} />}
+      {/* Atmospheric Fog */}
+      <fog attach="fog" args={["#030712", 20, 90]} />
     </>
   );
 };

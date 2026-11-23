@@ -1,6 +1,5 @@
 import gsap from "gsap";
 import * as THREE from "three";
-import { ZoneId } from "@/types/world";
 
 export interface CameraTransitionConfig {
   camera: THREE.Camera;

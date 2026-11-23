@@ -27,9 +27,8 @@ export class DisposalManager {
     material.dispose();
 
     // Dispose all assigned textures
-    for (const key of Object.keys(material)) {
-      const value = (material as any)[key];
-      if (value && typeof value.dispose === "function" && value instanceof THREE.Texture) {
+    for (const value of Object.values(material as unknown as Record<string, unknown>)) {
+      if (value instanceof THREE.Texture) {
         value.dispose();
       }
     }

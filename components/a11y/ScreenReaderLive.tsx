@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useWorldStore } from "@/engine/store/useWorldStore";
 import { ZONES_METADATA } from "@/procedural/worldData";
 
@@ -15,19 +15,16 @@ export const ScreenReaderLive: React.FC = () => {
   const tourCurrentStep = useWorldStore((state) => state.tourCurrentStep);
   const isBooted = useWorldStore((state) => state.isBooted);
 
-  const [announcement, setAnnouncement] = useState("");
-
-  useEffect(() => {
-    if (!isBooted) return;
-
+  let announcement = "";
+  if (isBooted) {
     if (isTourActive) {
-      setAnnouncement(`AI Tour Step ${tourCurrentStep + 1} active in ${ZONES_METADATA[currentZone].name}.`);
+      announcement = `AI Tour Step ${tourCurrentStep + 1} active in ${ZONES_METADATA[currentZone].name}.`;
     } else if (selectedPoi) {
-      setAnnouncement(`Selected point of interest: ${selectedPoi.name}. ${selectedPoi.description}`);
+      announcement = `Selected point of interest: ${selectedPoi.name}. ${selectedPoi.description}`;
     } else {
-      setAnnouncement(`Navigated to ${ZONES_METADATA[currentZone].name}. ${ZONES_METADATA[currentZone].tagline}`);
+      announcement = `Navigated to ${ZONES_METADATA[currentZone].name}. ${ZONES_METADATA[currentZone].tagline}`;
     }
-  }, [currentZone, selectedPoi, isTourActive, tourCurrentStep, isBooted]);
+  }
 
   return (
     <div

@@ -38,9 +38,14 @@ export const AccessibilityControls: React.FC = () => {
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener("change", handler as EventListener);
         return () => mediaQuery.removeEventListener("change", handler as EventListener);
-      } else if ("addListener" in mediaQuery) {
-        mediaQuery.addListener(handler);
-        return () => mediaQuery.removeListener(handler);
+      }
+      const legacyQuery = mediaQuery as MediaQueryList & {
+        addListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+        removeListener?: (cb: (e: MediaQueryListEvent) => void) => void;
+      };
+      if (legacyQuery.addListener && legacyQuery.removeListener) {
+        legacyQuery.addListener(handler);
+        return () => legacyQuery.removeListener?.(handler);
       }
     } catch {
       // Gracefully fall back if matchMedia unsupported on mobile

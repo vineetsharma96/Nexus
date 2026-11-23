@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useWorldStore } from "@/engine/store/useWorldStore";
-import { OceanState, QualityTier, ColorScheme } from "@/types/world";
+import { OceanState, QualityTier } from "@/types/world";
 import {
   Sliders,
   X,
@@ -160,17 +160,19 @@ export const SandboxControls: React.FC = () => {
                 <span>ATMOSPHERE COLOR PALETTE</span>
               </label>
               <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { id: "default", label: "CYAN VOID" },
-                  { id: "cyber", label: "CYBER EMERALD" },
-                  { id: "amber", label: "NEO AMBER" },
-                  { id: "monochrome", label: "GRAPHITE" },
-                ].map((c) => (
+                {(
+                  [
+                    { id: "default", label: "CYAN VOID" },
+                    { id: "cyber", label: "CYBER EMERALD" },
+                    { id: "amber", label: "NEO AMBER" },
+                    { id: "monochrome", label: "GRAPHITE" },
+                  ] as const
+                ).map((c) => (
                   <button
                     type="button"
                     key={c.id}
                     onClick={() =>
-                      useWorldStore.setState({ colorScheme: c.id as ColorScheme })
+                      useWorldStore.setState({ colorScheme: c.id })
                     }
                     className={`px-2 py-1.5 rounded uppercase text-[9px] font-bold border transition-all cursor-pointer ${
                       colorScheme === c.id

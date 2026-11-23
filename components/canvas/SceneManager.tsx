@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
+import React from "react";
 import { Lighting } from "./Lighting";
 import { CameraRig } from "./CameraRig";
 import { CoreGeometry } from "@/procedural/core/CoreGeometry";
@@ -11,8 +9,6 @@ import { ParticleField } from "@/procedural/ocean/ParticleField";
 import { LaboratoryGenerator } from "@/procedural/lab/LaboratoryGenerator";
 import { WarpPortal } from "@/procedural/portals/WarpPortal";
 import { EnergyConduits } from "./EnergyConduits";
-import { useWorldStore } from "@/engine/store/useWorldStore";
-
 import { AdaptiveQualityMonitor } from "@/engine/performance/AdaptiveQualityMonitor";
 
 export const SceneManager: React.FC = () => {

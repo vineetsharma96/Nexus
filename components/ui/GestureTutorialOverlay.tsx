@@ -16,7 +16,7 @@ import {
   FlipHorizontal,
 } from "lucide-react";
 
-type TutorialStepId = "fist" | "palm" | "swipe";
+type TutorialStepId = "fist" | "palm" | "swipe" | "pinch";
 
 interface TutorialStep {
   id: TutorialStepId;
@@ -33,16 +33,16 @@ const TUTORIAL_STEPS: TutorialStep[] = [
   {
     id: "fist",
     stepNum: "01",
-    title: "Clenched Fist — Pause Activity",
-    gestureName: "CLENCHED FIST",
+    title: "Closed Hand — Pause Activity",
+    gestureName: "CLOSED HAND",
     actionBadge: "PAUSE 3D WORLD",
     accentColor: "#f59e0b",
     summary:
-      "Fold all four fingers and your thumb inward into a closed fist facing the camera. Hold steady for ~0.2 seconds to freeze all 3D procedural animations and particle streams in place.",
+      "Curl all four fingers inward into a closed fist facing the camera. Hold steady for ~0.2 seconds to freeze all 3D procedural animations and particle streams in place.",
     tips: [
-      "Keep all 4 fingertips curled toward the center of your palm.",
-      "Tuck your thumb against your index knuckle so it isn't read as a pinch.",
-      "Works in both Front (Selfie) and Rear (Environment) camera modes.",
+      "Curl all 4 fingertips firmly toward the center of your palm.",
+      "Works whether your thumb rests across your fingers or beside your index knuckle.",
+      "Works reliably in both Front and Rear camera modes.",
     ],
   },
   {
@@ -53,26 +53,41 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     actionBadge: "RESUME 3D WORLD",
     accentColor: "#10b981",
     summary:
-      "Spread all five fingers wide open facing the camera and hold your hand steady. The simulation immediately restores its speed and continues from the exact frame where it paused.",
+      "Spread all five fingers wide open facing the camera and hold your hand steady. The simulation immediately restores its speed and continues smoothly.",
     tips: [
       "Extend all 5 digits (Thumb, Index, Middle, Ring, and Pinky) clearly.",
-      "Hold your open hand stationary for ~0.2 seconds so it isn't read as a swipe.",
-      "Watch the HUD status switch from PAUSED back to LIVE.",
+      "Hold your open hand stationary for ~0.2 seconds so it isn't read as a slide.",
+      "Check the 5-finger telemetry indicator (T I M R P) all lit in cyan.",
     ],
   },
   {
     id: "swipe",
     stepNum: "03",
-    title: "Four-Finger Swipe — Zone Navigation",
-    gestureName: "4-FINGER LEFT / RIGHT",
+    title: "Slide Left / Right — Zone Navigation",
+    gestureName: "SLIDE LEFT / RIGHT",
     actionBadge: "NEXT / PREV ZONE",
     accentColor: "#a855f7",
     summary:
-      "Raise four extended fingers (Index, Middle, Ring, Pinky) and sweep your hand horizontally Left or Right across the camera frame to warp between Core, City, Ocean, and Lab.",
+      "Keep your hand open (3–4 fingers extended) and slide horizontally Left or Right across the camera frame to warp between Core, City, Ocean, and Lab.",
     tips: [
-      "Move 4 fingers RIGHT to advance: Core → Code City → Data Ocean → AI Lab.",
-      "Move 4 fingers LEFT to return to the previous spatial zone.",
-      "A 0.9s cooldown prevents accidental double-warps on a single wave.",
+      "Slide RIGHT to advance: Core → Code City → Data Ocean → AI Lab.",
+      "Slide LEFT to return to the previous spatial zone.",
+      "A 0.7s cooldown prevents accidental double-warps on a single wave.",
+    ],
+  },
+  {
+    id: "pinch",
+    stepNum: "04",
+    title: "Pinch In / Pinch Out — 3D Scale",
+    gestureName: "PINCH IN / OUT",
+    actionBadge: "SCALE 3D OBJECT",
+    accentColor: "#00f0ff",
+    summary:
+      "Bring your Thumb and Index finger close together to Pinch In (shrink) or spread them apart to Pinch Out (expand) the active 3D object smoothly.",
+    tips: [
+      "Touch thumb and index fingertips together to lock into Pinch mode, then spread wide out.",
+      "Or keep middle, ring, and pinky fingers curled like calipers to scale cleanly across the full range.",
+      "Switching back to Open Palm or Closed Hand locks your chosen scale in place.",
     ],
   },
 ];
@@ -89,32 +104,40 @@ export const GestureTutorialOverlay: React.FC = () => {
   const setGestureTutorialOpen = useWorldStore((state) => state.setGestureTutorialOpen);
   const isCvEnabled = useWorldStore((state) => state.isCvEnabled);
   const setCvEnabled = useWorldStore((state) => state.setCvEnabled);
-  const cvGesture = useWorldStore((state) => state.cvGesture);
   const isActivityPaused = useWorldStore((state) => state.isActivityPaused);
   const setActivityPaused = useWorldStore((state) => state.setActivityPaused);
   const currentZone = useWorldStore((state) => state.currentZone);
   const cycleZone = useWorldStore((state) => state.cycleZone);
-  const arFacingMode = useWorldStore((state) => state.arFacingMode);
-  const toggleArFacingMode = useWorldStore((state) => state.toggleArFacingMode);
+  const objectScale = useWorldStore((state) => state.objectScale);
+  const setPinchTelemetry = useWorldStore((state) => state.setPinchTelemetry);
+  const cameraFacingMode = useWorldStore((state) => state.cameraFacingMode);
+  const toggleCameraFacingMode = useWorldStore((state) => state.toggleCameraFacingMode);
 
   const [activeIdx, setActiveIdx] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Record<TutorialStepId, boolean>>({
     fist: false,
     palm: false,
     swipe: false,
+    pinch: false,
   });
 
   // Automatically mark tutorial steps completed when live CV gesture triggers
   useEffect(() => {
     if (!isOpen) return;
-    if (cvGesture === "fist_pause") {
-      setCompletedSteps((prev) => (prev.fist ? prev : { ...prev, fist: true }));
-    } else if (cvGesture === "palm_resume") {
-      setCompletedSteps((prev) => (prev.palm ? prev : { ...prev, palm: true }));
-    } else if (cvGesture === "swipe_left" || cvGesture === "swipe_right") {
-      setCompletedSteps((prev) => (prev.swipe ? prev : { ...prev, swipe: true }));
-    }
-  }, [cvGesture, isOpen]);
+    return useWorldStore.subscribe((state, prevState) => {
+      if (state.cvGesture === prevState.cvGesture) return;
+      const g = state.cvGesture;
+      if (g === "fist_pause") {
+        setCompletedSteps((prev) => (prev.fist ? prev : { ...prev, fist: true }));
+      } else if (g === "palm_resume") {
+        setCompletedSteps((prev) => (prev.palm ? prev : { ...prev, palm: true }));
+      } else if (g === "swipe_left" || g === "swipe_right") {
+        setCompletedSteps((prev) => (prev.swipe ? prev : { ...prev, swipe: true }));
+      } else if (g === "pinching_small" || g === "pinching_big") {
+        setCompletedSteps((prev) => (prev.pinch ? prev : { ...prev, pinch: true }));
+      }
+    });
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -139,6 +162,17 @@ export const GestureTutorialOverlay: React.FC = () => {
     setCompletedSteps((prev) => ({ ...prev, swipe: true }));
   };
 
+  const handlePracticePinch = (dir: "in" | "out") => {
+    ProceduralAudio.playHover();
+    const next = dir === "in" ? Math.max(0.4, objectScale - 0.35) : Math.min(2.4, objectScale + 0.35);
+    setPinchTelemetry(
+      dir === "in" ? 0.15 : 0.85,
+      dir === "in" ? "pinching_small" : "pinching_big",
+      Number(next.toFixed(2))
+    );
+    setCompletedSteps((prev) => ({ ...prev, pinch: true }));
+  };
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-2.5 sm:p-4 bg-black/65 font-mono select-none pointer-events-auto">
       <div className="relative w-full max-w-2xl glass-panel-glow rounded-lg border border-cyan-500/40 p-3.5 sm:p-6 flex flex-col max-h-[88dvh] overflow-y-auto shadow-[0_0_50px_rgba(0,240,255,0.2)]">
@@ -159,7 +193,7 @@ export const GestureTutorialOverlay: React.FC = () => {
                 INTERACTIVE CV GESTURE TUTORIAL
               </h2>
               <p className="text-[10px] text-slate-400 truncate">
-                Master hands-free spatial control · {completedCount}/3 Gestures Verified
+                Master hands-free spatial control · {completedCount}/4 Gestures Verified
               </p>
             </div>
           </div>
@@ -169,13 +203,13 @@ export const GestureTutorialOverlay: React.FC = () => {
               type="button"
               onClick={() => {
                 ProceduralAudio.playSelect();
-                toggleArFacingMode();
+                toggleCameraFacingMode();
               }}
               className="px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] text-cyan-300 flex items-center space-x-1 cursor-pointer"
               title="Switch Front or Rear Camera"
             >
               <FlipHorizontal className="w-3 h-3" />
-              <span>{arFacingMode === "user" ? "FRONT CAM" : "REAR CAM"}</span>
+              <span>{cameraFacingMode === "user" ? "FRONT CAM" : "REAR CAM"}</span>
             </button>
 
             <button
@@ -190,7 +224,7 @@ export const GestureTutorialOverlay: React.FC = () => {
         </div>
 
         {/* Step Navigation Tabs */}
-        <div className="grid grid-cols-3 gap-1.5 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-4">
           {TUTORIAL_STEPS.map((step, idx) => {
             const isCurrent = idx === activeIdx;
             const isDone = completedSteps[step.id];
@@ -447,7 +481,69 @@ export const GestureTutorialOverlay: React.FC = () => {
                   fontSize="10"
                   fontWeight="bold"
                 >
-                  ◄ SWIPE 4 FINGERS ►
+                  ◄ SLIDE LEFT / RIGHT ►
+                </text>
+              </svg>
+            )}
+
+            {/* Step 4 SVG: Pinch In / Pinch Out (Scale) */}
+            {currentStep.id === "pinch" && (
+              <svg className="w-36 h-36" viewBox="0 0 160 160">
+                <circle
+                  cx="80"
+                  cy="76"
+                  r="54"
+                  fill="rgba(0, 240, 255, 0.06)"
+                  stroke="#00f0ff"
+                  strokeWidth="1.5"
+                  strokeDasharray="5 4"
+                />
+                {/* Thumb tip & Index tip pinch vector */}
+                <line
+                  x1="54"
+                  y1="62"
+                  x2="106"
+                  y2="62"
+                  stroke="#00f0ff"
+                  strokeWidth="2.5"
+                  strokeDasharray="4 3"
+                />
+                {/* Thumb */}
+                <line
+                  x1="64"
+                  y1="108"
+                  x2="54"
+                  y2="62"
+                  stroke="#f59e0b"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                />
+                <circle cx="54" cy="62" r="7" fill="#ec4899" stroke="#ffffff" strokeWidth="2" />
+                {/* Index */}
+                <line
+                  x1="96"
+                  y1="108"
+                  x2="106"
+                  y2="62"
+                  stroke="#00f0ff"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                />
+                <circle cx="106" cy="62" r="7" fill="#10b981" stroke="#ffffff" strokeWidth="2" />
+                {/* Scale indicator badge */}
+                <rect x="60" y="34" width="40" height="18" rx="4" fill="#0f172a" stroke="#00f0ff" strokeWidth="1.5" />
+                <text x="80" y="46" textAnchor="middle" fill="#f8fafc" fontSize="9" fontWeight="bold">
+                  {objectScale.toFixed(2)}x
+                </text>
+                <text
+                  x="80"
+                  y="136"
+                  textAnchor="middle"
+                  fill="#a5f3fc"
+                  fontSize="10"
+                  fontWeight="bold"
+                >
+                  PINCH IN ◄ ► OUT
                 </text>
               </svg>
             )}
@@ -458,7 +554,7 @@ export const GestureTutorialOverlay: React.FC = () => {
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <span className="text-[10px] font-bold text-cyan-400 tracking-wider">
-                  GESTURE {currentStep.stepNum} OF 03
+                  GESTURE {currentStep.stepNum} OF 04
                 </span>
                 <span className="text-[10px] text-slate-400">
                   {isCvEnabled ? "CAMERA TRACKING: ACTIVE" : "CAMERA TRACKING: STANDBY"}
@@ -582,6 +678,28 @@ export const GestureTutorialOverlay: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {currentStep.id === "pinch" && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePracticePinch("in")}
+                    className="flex-1 py-2 px-3 rounded bg-pink-500/20 hover:bg-pink-500/35 border border-pink-400 text-pink-200 font-bold text-xs transition-all cursor-pointer"
+                  >
+                    ▼ PINCH IN (SHRINK)
+                  </button>
+                  <div className="px-2.5 py-2 rounded bg-slate-900 border border-cyan-500/30 text-[11px] font-bold text-cyan-300 tabular-nums shrink-0">
+                    {objectScale.toFixed(2)}x
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handlePracticePinch("out")}
+                    className="flex-1 py-2 px-3 rounded bg-emerald-500/20 hover:bg-emerald-500/35 border border-emerald-400 text-emerald-200 font-bold text-xs transition-all cursor-pointer"
+                  >
+                    ▲ PINCH OUT (EXPAND)
+                  </button>
                 </div>
               )}
             </div>

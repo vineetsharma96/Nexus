@@ -12,8 +12,6 @@ import {
   Play,
   Square,
   Activity,
-  Maximize2,
-  Layers,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";

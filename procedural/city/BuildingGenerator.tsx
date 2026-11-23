@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useMemo } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { ProceduralTextures } from "../materials/TextureGenerators";
 import { useWorldStore } from "@/engine/store/useWorldStore";
@@ -90,7 +90,7 @@ export const Building: React.FC<BuildingParams> = ({
     }
   });
 
-  const handleClick = (e: any) => {
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     ProceduralAudio.playSelect();
     const cityPois = ZONES_METADATA.code_city.pois;
